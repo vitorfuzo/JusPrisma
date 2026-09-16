@@ -40,3 +40,7 @@ management:
 jusprisma:
   jwt:
     segredo: ${JUSPRISMA_JWT_SECRET}
+  cookie:
+    # Falso apenas em desenvolvimento sobre http; o navegador recusaria um cookie
+    # Secure numa origem insegura. Em qualquer outro ambiente permanece true.
+    seguro: ${JUSPRISMA_COOKIE_SEGURO:true}

@@ -34,4 +34,10 @@ public interface RepositorioDeConta {
      * campos, em vez de afrouxar as policies da tabela.
      */
     Optional<CredenciaisDeAcesso> buscarCredenciais(Email email);
+
+    /**
+     * Busca um usuário dentro do tenant corrente. Sujeito a RLS: usuário de outro
+     * escritório não é encontrado, mesmo com o id correto em mãos.
+     */
+    Optional<Usuario> buscarPorId(java.util.UUID id);
 }

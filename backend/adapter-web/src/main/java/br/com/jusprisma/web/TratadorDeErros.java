@@ -4,6 +4,7 @@ import br.com.jusprisma.aplicacao.conta.ContaIndisponivelException;
 import br.com.jusprisma.aplicacao.conta.CredenciaisInvalidasException;
 import br.com.jusprisma.aplicacao.conta.EmailJaCadastradoException;
 import br.com.jusprisma.aplicacao.conta.SenhaFracaException;
+import br.com.jusprisma.aplicacao.conta.SessaoInvalidaException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -31,6 +32,14 @@ public class TratadorDeErros {
         // Mensagem propositalmente igual para e-mail inexistente e senha errada.
         return problema(HttpStatus.UNAUTHORIZED, "Credenciais inválidas",
                 "E-mail ou senha inválidos.");
+    }
+
+    @ExceptionHandler(SessaoInvalidaException.class)
+    public ProblemDetail sessaoInvalida(SessaoInvalidaException e) {
+        // Mensagem unica: distinguir "token ja usado" de "token desconhecido" informaria
+        // a quem capturou um token se ele chegou a circular de verdade.
+        return problema(HttpStatus.UNAUTHORIZED, "Sessão inválida",
+                "Faça login novamente.");
     }
 
     @ExceptionHandler(ContaIndisponivelException.class)

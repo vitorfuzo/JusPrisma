@@ -44,13 +44,20 @@ public class ConfiguracaoDeSeguranca {
     @Bean
     public SecurityFilterChain cadeiaDeFiltros(HttpSecurity http) throws Exception {
         http
-                // API sem sessão e sem cookie de autenticação: não há o que forjar por CSRF.
-                // Quando o refresh entrar por cookie httpOnly, este ponto muda e a proteção
-                // volta especificamente para a rota de refresh.
+                // Existe um cookie de autenticação — o de renovação — então a pergunta de
+                // CSRF é legítima. A defesa dele não é token sincronizador: é SameSite=Strict
+                // somado a Path restrito a /api/v1/sessoes. O navegador não anexa esse cookie
+                // a requisição originada de outro site, e nem sequer o envia ao resto da API.
+                // O restante das rotas se autentica por cabeçalho Authorization, que navegador
+                // nenhum preenche sozinho e portanto não é forjável por CSRF.
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(rotas -> rotas
                         .requestMatchers(HttpMethod.POST, "/api/v1/contas", "/api/v1/sessoes").permitAll()
+                        // Renovacao e logout se autenticam pelo cookie de renovacao,
+                        // nao pelo cabecalho Authorization: o access ja pode ter expirado.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/sessoes/renovacao").permitAll()
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/sessoes").permitAll()
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated())

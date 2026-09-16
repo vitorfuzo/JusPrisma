@@ -78,4 +78,30 @@ public class RepositorioDeContaJdbc implements RepositorioDeConta {
                         rs.getBoolean("tenant_operacional")))
                 .optional();
     }
+
+    @Override
+    public Optional<Usuario> buscarPorId(java.util.UUID id) {
+        return jdbc.sql("""
+                SELECT id, tenant_id, email, papel, oab, uf_oab, email_verificado_em, criado_em
+                  FROM usuario
+                 WHERE id = :id
+                """)
+                .param("id", id)
+                .query((rs, linha) -> new Usuario(
+                        rs.getObject("id", java.util.UUID.class),
+                        rs.getObject("tenant_id", java.util.UUID.class),
+                        Email.de(rs.getString("email")),
+                        Papel.valueOf(rs.getString("papel")),
+                        rs.getString("oab"),
+                        rs.getString("uf_oab"),
+                        instante(rs, "email_verificado_em"),
+                        instante(rs, "criado_em")))
+                .optional();
+    }
+
+    private static java.time.Instant instante(java.sql.ResultSet rs, String coluna)
+            throws java.sql.SQLException {
+        Timestamp valor = rs.getTimestamp(coluna);
+        return valor == null ? null : valor.toInstant();
+    }
 }

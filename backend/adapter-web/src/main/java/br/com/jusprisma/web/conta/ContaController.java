@@ -2,16 +2,23 @@ package br.com.jusprisma.web.conta;
 
 import br.com.jusprisma.aplicacao.conta.Autenticar;
 import br.com.jusprisma.aplicacao.conta.CadastrarConta;
+import br.com.jusprisma.aplicacao.conta.SessoesDeAcesso;
+import br.com.jusprisma.dominio.conta.Papel;
 import br.com.jusprisma.dominio.conta.Usuario;
+import br.com.jusprisma.web.seguranca.CookieDeRenovacao;
 import br.com.jusprisma.web.seguranca.EmissorDeAcesso;
+import br.com.jusprisma.web.seguranca.EmissorDeRenovacao;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,19 +30,28 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1")
-@Tag(name = "Conta", description = "Cadastro e autenticação")
+@Tag(name = "Conta", description = "Cadastro, autenticação e sessões")
 public class ContaController {
 
     private final CadastrarConta cadastrarConta;
     private final Autenticar autenticar;
-    private final EmissorDeAcesso emissor;
+    private final SessoesDeAcesso sessoes;
+    private final EmissorDeAcesso emissorDeAcesso;
+    private final EmissorDeRenovacao emissorDeRenovacao;
+    private final CookieDeRenovacao cookie;
 
     public ContaController(CadastrarConta cadastrarConta,
                            Autenticar autenticar,
-                           EmissorDeAcesso emissor) {
+                           SessoesDeAcesso sessoes,
+                           EmissorDeAcesso emissorDeAcesso,
+                           EmissorDeRenovacao emissorDeRenovacao,
+                           CookieDeRenovacao cookie) {
         this.cadastrarConta = cadastrarConta;
         this.autenticar = autenticar;
-        this.emissor = emissor;
+        this.sessoes = sessoes;
+        this.emissorDeAcesso = emissorDeAcesso;
+        this.emissorDeRenovacao = emissorDeRenovacao;
+        this.cookie = cookie;
     }
 
     // ----------------------------------------------------------------- cadastro
@@ -68,7 +84,7 @@ public class ContaController {
                 .body(new CadastroResponse(dono.id(), dono.tenantId(), dono.email().valor()));
     }
 
-    // ------------------------------------------------------------------- sessão
+    // ------------------------------------------------------------------ sessões
 
     public record LoginRequest(
             @NotBlank String email,
@@ -84,20 +100,83 @@ public class ContaController {
     }
 
     @PostMapping("/sessoes")
-    @Operation(summary = "Autentica e devolve um token de acesso")
-    public SessaoResponse autenticar(@Valid @RequestBody LoginRequest requisicao) {
+    @Operation(summary = "Autentica, abre uma sessão e devolve um token de acesso")
+    public ResponseEntity<SessaoResponse> abrirSessao(@Valid @RequestBody LoginRequest requisicao) {
         Autenticar.Autenticado autenticado =
                 autenticar.executar(requisicao.email(), requisicao.senha());
 
-        EmissorDeAcesso.TokenDeAcesso token = emissor.emitir(
-                autenticado.usuarioId(), autenticado.tenantId(), autenticado.papel());
+        SessoesDeAcesso.SessaoAberta sessao =
+                sessoes.abrir(autenticado.tenantId(), autenticado.usuarioId());
 
-        return new SessaoResponse(
-                token.valor(),
-                "Bearer",
-                token.validade().toSeconds(),
-                token.expiraEm(),
+        return responderComTokens(
+                autenticado.usuarioId(),
+                autenticado.tenantId(),
+                autenticado.papel(),
+                sessao.sessaoId(),
+                sessao.familiaId(),
+                sessao.expiraEm(),
                 autenticado.emailVerificado());
     }
 
+    @PostMapping("/sessoes/renovacao")
+    @Operation(summary = "Troca o token de renovação por um par novo")
+    public ResponseEntity<SessaoResponse> renovarSessao(HttpServletRequest requisicao) {
+        EmissorDeRenovacao.Vinculos vinculos = emissorDeRenovacao.interpretar(
+                cookie.ler(requisicao).orElse(null));
+
+        SessoesDeAcesso.SessaoRenovada renovada = sessoes.renovar(
+                vinculos.tenantId(), vinculos.usuarioId(), vinculos.familiaId(), vinculos.sessaoId());
+
+        return responderComTokens(
+                renovada.usuarioId(),
+                vinculos.tenantId(),
+                renovada.papel(),
+                renovada.sessaoId(),
+                renovada.familiaId(),
+                renovada.expiraEm(),
+                renovada.emailVerificado());
+    }
+
+    @DeleteMapping("/sessoes")
+    @Operation(summary = "Encerra a sessão e revoga a família de renovação")
+    public ResponseEntity<Void> encerrarSessao(HttpServletRequest requisicao) {
+        HttpHeaders cabecalhos = new HttpHeaders();
+
+        // O logout sempre limpa o cookie e sempre responde 204, mesmo com token
+        // inválido: um logout que falha deixa o usuário achando que saiu quando não saiu.
+        cookie.ler(requisicao).ifPresent(token -> {
+            try {
+                EmissorDeRenovacao.Vinculos vinculos = emissorDeRenovacao.interpretar(token);
+                sessoes.encerrar(vinculos.tenantId(), vinculos.familiaId());
+            } catch (RuntimeException ignorado) {
+                // Token já inválido: não há família para revogar, e o cookie sai de qualquer forma.
+            }
+        });
+
+        cookie.limpar(cabecalhos);
+        return ResponseEntity.noContent().headers(cabecalhos).build();
+    }
+
+    // --------------------------------------------------------------------- apoio
+
+    private ResponseEntity<SessaoResponse> responderComTokens(
+            UUID usuarioId, UUID tenantId, Papel papel,
+            UUID sessaoId, UUID familiaId, Instant expiraEm, boolean emailVerificado) {
+
+        EmissorDeAcesso.TokenDeAcesso acesso = emissorDeAcesso.emitir(usuarioId, tenantId, papel);
+        EmissorDeRenovacao.TokenDeRenovacao renovacao =
+                emissorDeRenovacao.emitir(sessaoId, usuarioId, tenantId, familiaId, expiraEm);
+
+        HttpHeaders cabecalhos = new HttpHeaders();
+        cookie.anexar(cabecalhos, renovacao.valor(), emissorDeRenovacao.validade());
+
+        return ResponseEntity.ok()
+                .headers(cabecalhos)
+                .body(new SessaoResponse(
+                        acesso.valor(),
+                        "Bearer",
+                        acesso.validade().toSeconds(),
+                        acesso.expiraEm(),
+                        emailVerificado));
+    }
 }
