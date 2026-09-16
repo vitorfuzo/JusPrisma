@@ -1,0 +1,91 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Uma execução por branch. Empurrar três commits seguidos não deve manter três
+# builds concorrentes disputando runner — só o último importa.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Preparar Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Os testes sobem Postgres real via Testcontainers. O runner do GitHub já traz
+      # Docker; esta etapa existe para que a falha, se houver, apareça aqui e não
+      # disfarçada no meio de um teste.
+      - name: Conferir que o Docker responde
+        run: docker version
+
+      - name: Build e testes
+        run: ./gradlew build --no-daemon
+        env:
+          # Nenhum segredo real é necessário: os testes de integração sobem o próprio
+          # banco e substituem o envio de e-mail por um duplo. Só o que a aplicação
+          # exige para subir precisa existir.
+          JUSPRISMA_JWT_SECRET: ${{ secrets.JUSPRISMA_JWT_SECRET || 'Y2ktc2VtLXNlZ3JlZG8tcmVhbC1hcGVuYXMtcGFyYS1zdWJpci1vLWNvbnRleHRvLWRlLXRlc3Rl' }}
+
+      - name: Publicar relatório de testes
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorios-de-teste
+          path: '**/build/reports/tests/'
+          retention-days: 7
+
+  segredos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Precisa do histórico para varrer o diff, não só a árvore atual.
+          fetch-depth: 0
+
+      # A regra "zero segredo em código" do CLAUDE.md só vale se houver algo conferindo.
+      # Esta varredura é deliberadamente simples e tem falso positivo ocasional; a
+      # alternativa — confiar em revisão humana — falha silenciosamente e só descobre
+      # quando a chave já vazou.
+      - name: Procurar segredos comitados
+        run: |
+          set -euo pipefail
+
+          padroes='sk-ant-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|\$aact_[A-Za-z0-9_=-]{20,}'
+
+          # .env.example é template com valores vazios; .git e build são ruído.
+          if git grep -nIE "$padroes" -- \
+               ':!.github/workflows/build.yml' \
+               ':!docs/**' \
+               ':!**/build/**'; then
+            echo "::error::Possivel segredo comitado. Mova para variavel de ambiente."
+            exit 1
+          fi
+
+          if git ls-files --error-unmatch .env 2>/dev/null; then
+            echo "::error::.env esta versionado. Ele contem segredos e deve ficar fora do git."
+            exit 1
+          fi
+
+          echo "Nenhum segredo aparente."

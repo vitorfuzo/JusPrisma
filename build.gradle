@@ -43,6 +43,11 @@ subprojects {
         // -serial: excecoes de dominio nao sao serializadas; exigir serialVersionUID
         // nelas so gera ruido que esconde aviso de verdade.
         options.compilerArgs << '-Xlint:all,-serial' << '-parameters'
+        // -Werror transforma a regra "sem warning novo" do CLAUDE.md em algo que o build
+        // cobra, em vez de algo que se espera da revisao. Hoje estamos em zero avisos; o
+        // custo e que uma atualizacao de dependencia que gere depreciacao quebra o build,
+        // o que e' exatamente quando queremos saber.
+        options.compilerArgs << '-Werror'
     }
 
     tasks.named('test') {
