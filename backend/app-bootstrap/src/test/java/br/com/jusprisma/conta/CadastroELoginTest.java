@@ -62,6 +62,9 @@ class CadastroELoginTest {
         registro.add("spring.datasource.password", () -> SENHA_APP);
         registro.add("spring.flyway.user", POSTGRES::getUsername);
         registro.add("spring.flyway.password", () -> SENHA_DONO);
+        // Estes testes criam dezenas de contas da mesma origem; a protecao contra
+        // abuso tem teste proprio em LimiteDeTentativasTest.
+        registro.add("jusprisma.limite-de-tentativas.habilitado", () -> false);
         registro.add("jusprisma.jwt.segredo",
                 () -> Base64.getEncoder().encodeToString(new byte[64]));
     }
@@ -169,9 +172,12 @@ class CadastroELoginTest {
                 .andExpect(status().isUnauthorized())
                 .andReturn().getResponse().getContentAsString();
 
-        assertThat(comEmailInexistente)
+        // O correlacaoId e removido da comparacao porque muda a cada requisicao, e nao em
+        // funcao da conta: ele nao diz nada sobre o e-mail existir ou nao. Todo o resto do
+        // corpo tem que ser identico — e e' o resto que entregaria quais e-mails tem conta.
+        assertThat(semCorrelacao(comEmailInexistente))
                 .as("respostas diferentes entregariam quais e-mails têm conta")
-                .isEqualTo(comSenhaErrada);
+                .isEqualTo(semCorrelacao(comSenhaErrada));
     }
 
     @Test
@@ -194,6 +200,13 @@ class CadastroELoginTest {
     }
 
     // ------------------------------------------------------------------ apoio
+
+    /** Remove o identificador de correlacao, que e' por requisicao e nao por conta. */
+    private String semCorrelacao(String corpo) {
+        var no = (tools.jackson.databind.node.ObjectNode) json.readTree(corpo);
+        no.remove("correlacaoId");
+        return no.toString();
+    }
 
     private static String emailUnico() {
         return "socio-" + UUID.randomUUID() + "@exemplo.invalido";

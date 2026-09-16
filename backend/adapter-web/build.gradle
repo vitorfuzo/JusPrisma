@@ -6,4 +6,6 @@ dependencies {
     // JwtEncoder/JwtDecoder (Nimbus). O token e' credencial HTTP, entao a emissao
     // vive na borda web; a chave e a cadeia de filtros ficam em app-bootstrap.
     implementation 'org.springframework.security:spring-security-oauth2-jose'
+    // Cache com expiracao para os contadores de tentativa. Versao vem do BOM do Boot.
+    implementation 'com.github.ben-manes.caffeine:caffeine'
 }

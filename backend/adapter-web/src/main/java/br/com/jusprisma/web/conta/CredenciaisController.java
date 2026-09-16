@@ -2,6 +2,8 @@ package br.com.jusprisma.web.conta;
 
 import br.com.jusprisma.aplicacao.conta.RecuperacaoDeSenha;
 import br.com.jusprisma.aplicacao.conta.VerificacaoDeEmail;
+import br.com.jusprisma.web.seguranca.LimitadorDeTentativas;
+import br.com.jusprisma.web.seguranca.PoliticaDeTentativas;
 import br.com.jusprisma.web.seguranca.UsuarioAutenticado;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,10 +31,14 @@ public class CredenciaisController {
 
     private final VerificacaoDeEmail verificacao;
     private final RecuperacaoDeSenha recuperacao;
+    private final LimitadorDeTentativas limitador;
 
-    public CredenciaisController(VerificacaoDeEmail verificacao, RecuperacaoDeSenha recuperacao) {
+    public CredenciaisController(VerificacaoDeEmail verificacao,
+                                 RecuperacaoDeSenha recuperacao,
+                                 LimitadorDeTentativas limitador) {
         this.verificacao = verificacao;
         this.recuperacao = recuperacao;
+        this.limitador = limitador;
     }
 
     // ------------------------------------------------------ verificação de e-mail
@@ -52,6 +58,8 @@ public class CredenciaisController {
     @Operation(summary = "Reenvia o link de verificação para o usuário autenticado")
     public void reenviarVerificacao(Authentication autenticacao) {
         UsuarioAutenticado usuario = UsuarioAutenticado.de(autenticacao);
+        limitador.registrar(PoliticaDeTentativas.VERIFICACAO_POR_USUARIO,
+                usuario.usuarioId().toString());
         verificacao.reenviar(usuario.tenantId(), usuario.usuarioId());
     }
 
@@ -64,8 +72,12 @@ public class CredenciaisController {
     @ResponseStatus(HttpStatus.ACCEPTED)
     @Operation(summary = "Envia o link de redefinição, se houver conta para o e-mail")
     public void solicitarRecuperacao(@Valid @RequestBody RecuperacaoRequest requisicao) {
-        // 202 sempre, exista ou não a conta. Responder 404 para e-mail desconhecido
-        // transformaria este formulário público num verificador de quem é cliente.
+        // Limite por e-mail: cada tentativa dispara uma mensagem, e sem teto o formulario
+        // publico vira ferramenta de inundar a caixa de outra pessoa.
+        limitador.registrar(PoliticaDeTentativas.RECUPERACAO_POR_EMAIL, requisicao.email());
+
+        // 202 sempre, exista ou nao a conta. Responder 404 para e-mail desconhecido
+        // transformaria este formulario publico num verificador de quem e cliente.
         recuperacao.solicitar(requisicao.email());
     }
 

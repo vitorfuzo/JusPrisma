@@ -8,6 +8,9 @@ import br.com.jusprisma.dominio.conta.Usuario;
 import br.com.jusprisma.web.seguranca.CookieDeRenovacao;
 import br.com.jusprisma.web.seguranca.EmissorDeAcesso;
 import br.com.jusprisma.web.seguranca.EmissorDeRenovacao;
+import br.com.jusprisma.web.seguranca.LimitadorDeTentativas;
+import br.com.jusprisma.web.seguranca.OrigemDaRequisicao;
+import br.com.jusprisma.web.seguranca.PoliticaDeTentativas;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -39,19 +42,25 @@ public class ContaController {
     private final EmissorDeAcesso emissorDeAcesso;
     private final EmissorDeRenovacao emissorDeRenovacao;
     private final CookieDeRenovacao cookie;
+    private final LimitadorDeTentativas limitador;
+    private final OrigemDaRequisicao origem;
 
     public ContaController(CadastrarConta cadastrarConta,
                            Autenticar autenticar,
                            SessoesDeAcesso sessoes,
                            EmissorDeAcesso emissorDeAcesso,
                            EmissorDeRenovacao emissorDeRenovacao,
-                           CookieDeRenovacao cookie) {
+                           CookieDeRenovacao cookie,
+                           LimitadorDeTentativas limitador,
+                           OrigemDaRequisicao origem) {
         this.cadastrarConta = cadastrarConta;
         this.autenticar = autenticar;
         this.sessoes = sessoes;
         this.emissorDeAcesso = emissorDeAcesso;
         this.emissorDeRenovacao = emissorDeRenovacao;
         this.cookie = cookie;
+        this.limitador = limitador;
+        this.origem = origem;
     }
 
     // ----------------------------------------------------------------- cadastro
@@ -70,7 +79,11 @@ public class ContaController {
 
     @PostMapping("/contas")
     @Operation(summary = "Cria uma conta nova e o usuário dono")
-    public ResponseEntity<CadastroResponse> cadastrar(@Valid @RequestBody CadastroRequest requisicao) {
+    public ResponseEntity<CadastroResponse> cadastrar(
+            @Valid @RequestBody CadastroRequest requisicao, HttpServletRequest http) {
+
+        limitador.registrar(PoliticaDeTentativas.CADASTRO_POR_IP, origem.ipDe(http));
+
         Usuario dono = cadastrarConta.executar(new CadastrarConta.Comando(
                 requisicao.nomeDoEscritorio(),
                 requisicao.cnpj(),
@@ -101,9 +114,21 @@ public class ContaController {
 
     @PostMapping("/sessoes")
     @Operation(summary = "Autentica, abre uma sessão e devolve um token de acesso")
-    public ResponseEntity<SessaoResponse> abrirSessao(@Valid @RequestBody LoginRequest requisicao) {
+    public ResponseEntity<SessaoResponse> abrirSessao(
+            @Valid @RequestBody LoginRequest requisicao, HttpServletRequest http) {
+
+        // Duas politicas, e as duas sao necessarias. Por IP barra varredura de muitas contas
+        // a partir de um ponto; por e-mail barra forca bruta contra uma conta especifica,
+        // que e o que sobrevive a troca de IP.
+        limitador.registrar(PoliticaDeTentativas.LOGIN_POR_IP, origem.ipDe(http));
+        limitador.registrar(PoliticaDeTentativas.LOGIN_POR_EMAIL, requisicao.email());
+
         Autenticar.Autenticado autenticado =
                 autenticar.executar(requisicao.email(), requisicao.senha());
+
+        // Acertou a senha: o contador do e-mail e zerado, para que quem errou duas vezes e
+        // acertou na terceira nao fique com credito queimado pelo resto da janela.
+        limitador.zerar(PoliticaDeTentativas.LOGIN_POR_EMAIL, requisicao.email());
 
         SessoesDeAcesso.SessaoAberta sessao =
                 sessoes.abrir(autenticado.tenantId(), autenticado.usuarioId());

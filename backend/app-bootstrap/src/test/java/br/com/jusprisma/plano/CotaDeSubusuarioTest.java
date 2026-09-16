@@ -62,6 +62,9 @@ class CotaDeSubusuarioTest {
         registro.add("spring.datasource.password", () -> SENHA_APP);
         registro.add("spring.flyway.user", POSTGRES::getUsername);
         registro.add("spring.flyway.password", () -> SENHA_DONO);
+        // Estes testes criam dezenas de contas da mesma origem; a protecao contra
+        // abuso tem teste proprio em LimiteDeTentativasTest.
+        registro.add("jusprisma.limite-de-tentativas.habilitado", () -> false);
         registro.add("jusprisma.jwt.segredo",
                 () -> Base64.getEncoder().encodeToString(new byte[64]));
         registro.add("jusprisma.cookie.seguro", () -> false);

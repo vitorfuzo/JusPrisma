@@ -8,6 +8,10 @@ import br.com.jusprisma.aplicacao.conta.SessaoInvalidaException;
 import br.com.jusprisma.aplicacao.conta.ConviteInvalidoException;
 import br.com.jusprisma.aplicacao.plano.CotaExcedidaException;
 import br.com.jusprisma.aplicacao.plano.SemAssinaturaVigenteException;
+import br.com.jusprisma.web.observabilidade.CorrelacaoDeRequisicao;
+import br.com.jusprisma.web.seguranca.TentativasExcedidasException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import br.com.jusprisma.aplicacao.conta.OperacaoNaoPermitidaException;
 import br.com.jusprisma.aplicacao.conta.TokenInvalidoException;
 import org.slf4j.Logger;
@@ -65,6 +69,17 @@ public class TratadorDeErros {
     public ProblemDetail operacaoNaoPermitida(OperacaoNaoPermitidaException e) {
         // 403, nao 401: quem chegou aqui esta autenticado, so nao tem o papel necessario.
         return problema(HttpStatus.FORBIDDEN, "Operação não permitida", e.getMessage());
+    }
+
+    @ExceptionHandler(TentativasExcedidasException.class)
+    public ResponseEntity<ProblemDetail> tentativasExcedidas(TentativasExcedidasException e) {
+        ProblemDetail problema = problema(HttpStatus.TOO_MANY_REQUESTS, "Tentativas demais",
+                "Aguarde alguns minutos antes de tentar novamente.");
+
+        // Retry-After diz ao cliente quando voltar, em vez de deixa-lo martelar a rota.
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(e.esperar().toSeconds()))
+                .body(problema);
     }
 
     @ExceptionHandler(CotaExcedidaException.class)
@@ -135,6 +150,14 @@ public class TratadorDeErros {
         ProblemDetail problema = ProblemDetail.forStatus(status);
         problema.setTitle(titulo);
         problema.setDetail(detalhe);
+
+        // O identificador da requisição vai em toda resposta de erro para que o usuário
+        // possa citá-lo no suporte. É a diferença entre "deu erro ontem à tarde" e um
+        // ponteiro exato para a linha de log.
+        String correlacao = CorrelacaoDeRequisicao.atual();
+        if (correlacao != null) {
+            problema.setProperty("correlacaoId", correlacao);
+        }
         return problema;
     }
 }

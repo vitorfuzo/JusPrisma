@@ -23,6 +23,17 @@ spring:
 server:
   port: ${JUSPRISMA_PORT:8080}
 
+logging:
+  # Em dev, log legível no console. Em produção, JSON estruturado — cada linha vira um
+  # documento indexável, com o correlacaoId do MDC como campo de primeira classe.
+  # Vazio desliga a formatação estruturada e volta ao padrão legível.
+  structured:
+    format:
+      console: ${JUSPRISMA_LOG_ESTRUTURADO:}
+  pattern:
+    # No formato legível o correlacaoId entra entre colchetes, logo antes do logger.
+    correlation: "[${spring.application.name:jusprisma},%X{correlacaoId:-}] "
+
 management:
   endpoints:
     web:
@@ -46,6 +57,8 @@ jusprisma:
     seguro: ${JUSPRISMA_COOKIE_SEGURO:true}
   email:
     remetente: ${JUSPRISMA_EMAIL_REMETENTE:nao-responda@jusprisma.com.br}
+  rede:
+    atras-de-proxy: ${JUSPRISMA_ATRAS_DE_PROXY:false}
   app:
     # Base dos links enviados por e-mail. Aponta para o frontend, nao para a API.
     url-base: ${JUSPRISMA_APP_URL_BASE:http://localhost:5173}
