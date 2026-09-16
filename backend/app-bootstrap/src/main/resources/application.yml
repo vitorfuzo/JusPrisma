@@ -37,20 +37,16 @@ logging:
 resilience4j:
   retry:
     instances:
-      jobs:
-    habilitados: ${JUSPRISMA_JOBS_HABILITADOS:true}
-  asaas:
+      asaas:
         max-attempts: 3
         wait-duration: 500ms
-        # Backoff exponencial: repetir em intervalo fixo contra um servico que esta se
-        # recuperando de sobrecarga so prolonga a sobrecarga.
+        # Backoff exponencial: repetir em intervalo fixo contra um serviço que está se
+        # recuperando de sobrecarga só prolonga a sobrecarga.
         enable-exponential-backoff: true
         exponential-backoff-multiplier: 2
   circuitbreaker:
     instances:
-      jobs:
-    habilitados: ${JUSPRISMA_JOBS_HABILITADOS:true}
-  asaas:
+      asaas:
         sliding-window-size: 20
         failure-rate-threshold: 60
         wait-duration-in-open-state: 30s
@@ -82,10 +78,10 @@ jusprisma:
   rede:
     atras-de-proxy: ${JUSPRISMA_ATRAS_DE_PROXY:false}
   app:
-    # Base dos links enviados por e-mail. Aponta para o frontend, nao para a API.
+    # Base dos links enviados por e-mail. Aponta para o frontend, não para a API.
     url-base: ${JUSPRISMA_APP_URL_BASE:http://localhost:5173}
   operador-inicial:
-    # Cria o primeiro operador da plataforma, so quando a tabela esta vazia.
+    # Cria o primeiro operador da plataforma, só quando a tabela está vazia.
     # Remova a senha do ambiente depois da primeira subida.
     email: ${JUSPRISMA_OPERADOR_INICIAL_EMAIL:}
     senha: ${JUSPRISMA_OPERADOR_INICIAL_SENHA:}
@@ -95,6 +91,6 @@ jusprisma:
   asaas:
     url-base: ${JUSPRISMA_ASAAS_BASE_URL:https://api-sandbox.asaas.com/v3}
     chave: ${JUSPRISMA_ASAAS_API_KEY:}
-    # Token que o Asaas envia no cabecalho da notificacao. Sem ele configurado, toda
-    # notificacao e' recusada - a rota e' publica e aceitar sem conferir e' pior que negar.
+    # Token que o Asaas envia no cabeçalho da notificação. Sem ele configurado, toda
+    # notificação é recusada — a rota é pública, e aceitar sem conferir é pior que negar.
     token-webhook: ${JUSPRISMA_ASAAS_WEBHOOK_TOKEN:}

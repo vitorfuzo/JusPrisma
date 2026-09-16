@@ -1,6 +1,9 @@
 // Clients TJDFT, DataJud, DJEN. Toda chamada externa passa por Resilience4j.
 dependencies {
     implementation project(':backend:core-application')
+    // O classificador de dispositivo e' dominio puro, e o smoke test de
+    // cobertura o exercita contra dados reais do tribunal.
+    testImplementation project(':backend:core-domain')
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
     // Mesmo padrao do Flyway: o Boot 4 tirou as auto-configuracoes de
     // spring-boot-autoconfigure. Sem este artefato nao existe bean de
