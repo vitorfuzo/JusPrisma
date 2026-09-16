@@ -6,6 +6,8 @@ import br.com.jusprisma.aplicacao.conta.EmailJaCadastradoException;
 import br.com.jusprisma.aplicacao.conta.SenhaFracaException;
 import br.com.jusprisma.aplicacao.conta.SessaoInvalidaException;
 import br.com.jusprisma.aplicacao.conta.ConviteInvalidoException;
+import br.com.jusprisma.aplicacao.plano.CotaExcedidaException;
+import br.com.jusprisma.aplicacao.plano.SemAssinaturaVigenteException;
 import br.com.jusprisma.aplicacao.conta.OperacaoNaoPermitidaException;
 import br.com.jusprisma.aplicacao.conta.TokenInvalidoException;
 import org.slf4j.Logger;
@@ -63,6 +65,25 @@ public class TratadorDeErros {
     public ProblemDetail operacaoNaoPermitida(OperacaoNaoPermitidaException e) {
         // 403, nao 401: quem chegou aqui esta autenticado, so nao tem o papel necessario.
         return problema(HttpStatus.FORBIDDEN, "Operação não permitida", e.getMessage());
+    }
+
+    @ExceptionHandler(CotaExcedidaException.class)
+    public ProblemDetail cotaExcedida(CotaExcedidaException e) {
+        // 402 e nao 403: a operacao e legitima e o usuario tem o papel certo. O que falta e
+        // plano. A distincao importa para a interface, que deve oferecer upgrade em vez de
+        // dizer "voce nao tem permissao".
+        ProblemDetail problema = problema(HttpStatus.PAYMENT_REQUIRED,
+                "Limite do plano atingido", e.getMessage());
+        if (e.cota() != null) {
+            problema.setProperty("cota", e.cota().name());
+        }
+        return problema;
+    }
+
+    @ExceptionHandler(SemAssinaturaVigenteException.class)
+    public ProblemDetail semAssinatura(SemAssinaturaVigenteException e) {
+        return problema(HttpStatus.PAYMENT_REQUIRED, "Sem assinatura vigente",
+                "Este escritório não tem um plano ativo.");
     }
 
     @ExceptionHandler(ContaIndisponivelException.class)

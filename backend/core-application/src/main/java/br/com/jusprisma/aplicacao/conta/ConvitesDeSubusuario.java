@@ -2,10 +2,12 @@ package br.com.jusprisma.aplicacao.conta;
 
 import br.com.jusprisma.aplicacao.porta.CodificadorDeSenha;
 import br.com.jusprisma.aplicacao.porta.EnviadorDeEmail;
+import br.com.jusprisma.aplicacao.plano.LimitesVigentes;
 import br.com.jusprisma.aplicacao.porta.EscopoDeTenant;
 import br.com.jusprisma.dominio.conta.Convite;
 import br.com.jusprisma.dominio.conta.Email;
 import br.com.jusprisma.dominio.conta.Papel;
+import br.com.jusprisma.dominio.plano.Cota;
 import br.com.jusprisma.dominio.conta.Usuario;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,17 +32,20 @@ public class ConvitesDeSubusuario {
     private final CodificadorDeSenha codificador;
     private final EnviadorDeEmail email;
     private final EscopoDeTenant escopo;
+    private final LimitesVigentes limites;
 
     public ConvitesDeSubusuario(RepositorioDeConvite convites,
                                 RepositorioDeConta contas,
                                 CodificadorDeSenha codificador,
                                 EnviadorDeEmail email,
-                                EscopoDeTenant escopo) {
+                                EscopoDeTenant escopo,
+                                LimitesVigentes limites) {
         this.convites = convites;
         this.contas = contas;
         this.codificador = codificador;
         this.email = email;
         this.escopo = escopo;
+        this.limites = limites;
     }
 
     public record Comando(UUID tenantId, UUID convidadoPor, Papel papelDeQuemConvida,
@@ -48,13 +53,11 @@ public class ConvitesDeSubusuario {
     }
 
     /**
-     * Emite e envia um convite.
-     *
-     * <p>TODO(F0-7): quando {@code Plano.limites} existir, conferir aqui a cota de
-     * subusuários do plano. Hoje não há teto, e a cota é regra de negócio central.
+     * Emite e envia um convite, respeitando a cota de subusuários do plano.
      */
     public Convite convidar(Comando comando) {
         exigirDono(comando.papelDeQuemConvida(), "convidar pessoas para o escritório");
+        exigirVagaDeSubusuario(comando.tenantId());
 
         Email convidado = Email.de(comando.emailDoConvidado());
         String segredo = SegredoDeToken.gerar();
@@ -148,6 +151,21 @@ public class ConvitesDeSubusuario {
             throw new ConviteInvalidoException();
         }
         return convite;
+    }
+
+    /**
+     * Confere a cota de subusuários do plano.
+     *
+     * <p>O dono não conta: a cota é de pessoas <em>além</em> dele. Convites pendentes
+     * contam, porque cada um é uma vaga já prometida — não contá-los permitiria emitir dez
+     * convites num plano de três e estourar a cota no momento em que todos aceitassem,
+     * quando já não haveria como recusar sem desfazer o que foi prometido.
+     */
+    private void exigirVagaDeSubusuario(UUID tenantId) {
+        int ocupadas = escopo.executarComo(tenantId,
+                () -> Math.max(0, contas.contarUsuarios() - 1) + convites.contarPendentes());
+
+        limites.exigirEspacoEm(tenantId, Cota.SUBUSUARIOS, ocupadas);
     }
 
     private static void exigirDono(Papel papel, String acao) {

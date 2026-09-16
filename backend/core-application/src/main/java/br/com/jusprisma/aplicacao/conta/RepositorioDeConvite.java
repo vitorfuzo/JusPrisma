@@ -32,4 +32,7 @@ public interface RepositorioDeConvite {
 
     /** Revoga o convite pendente daquele e-mail, se houver, para que convidar de novo reenvie. */
     int revogarPendentePara(String email);
+
+    /** Convites ainda abertos. Contam contra a cota: cada um é uma vaga já prometida. */
+    int contarPendentes();
 }

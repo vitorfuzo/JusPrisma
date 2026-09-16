@@ -54,6 +54,9 @@ public interface RepositorioDeConta {
 
     void trocarSenha(java.util.UUID usuarioId, String senhaHash);
 
+    /** Quantos usuários o escritório tem hoje, incluindo o dono. Sujeito a RLS. */
+    int contarUsuarios();
+
     record ContaLocalizada(java.util.UUID usuarioId, java.util.UUID tenantId) {
     }
 }

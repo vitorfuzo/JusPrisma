@@ -1,6 +1,7 @@
 package br.com.jusprisma.conta;
 
 import br.com.jusprisma.JusPrismaApplication;
+import br.com.jusprisma.plano.PlanoDeTeste;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 import tools.jackson.databind.ObjectMapper;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.Base64;
 import java.util.UUID;
 
@@ -256,7 +260,20 @@ class ConviteDeSubusuarioTest {
 
         String tenantId = json.readTree(criada.getResponse().getContentAsString())
                 .get("tenantId").asString();
+
+        // Toda conta nasce na Degustacao, que nao tem vaga de subusuario. Promover para Pro
+        // e o que este teste precisa exercitar; a cota em si tem teste proprio em
+        // CotaDeSubusuarioTest.
+        try (Connection dono = conexaoDono()) {
+            PlanoDeTeste.promover(dono, UUID.fromString(tenantId), "PRO");
+        }
+
         return new Conta(email, nome, tenantId, entrar(email));
+    }
+
+    private static Connection conexaoDono() throws SQLException {
+        return DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), SENHA_DONO);
     }
 
     private String entrar(String email) throws Exception {

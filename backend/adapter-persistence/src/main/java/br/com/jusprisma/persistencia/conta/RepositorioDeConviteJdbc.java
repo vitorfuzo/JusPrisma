@@ -123,6 +123,16 @@ public class RepositorioDeConviteJdbc implements RepositorioDeConvite {
                 .update();
     }
 
+    @Override
+    public int contarPendentes() {
+        return jdbc.sql("""
+                SELECT count(*) FROM convite
+                 WHERE aceito_em IS NULL AND revogado_em IS NULL AND expira_em > now()
+                """)
+                .query(Integer.class)
+                .single();
+    }
+
     private static Convite mapearCompleto(ResultSet rs, int linha) throws SQLException {
         return new Convite(
                 rs.getObject("id", UUID.class),

@@ -139,6 +139,13 @@ public class RepositorioDeContaJdbc implements RepositorioDeConta {
                 .update();
     }
 
+    @Override
+    public int contarUsuarios() {
+        return jdbc.sql("SELECT count(*) FROM usuario")
+                .query(Integer.class)
+                .single();
+    }
+
     private static java.time.Instant instante(java.sql.ResultSet rs, String coluna)
             throws java.sql.SQLException {
         Timestamp valor = rs.getTimestamp(coluna);

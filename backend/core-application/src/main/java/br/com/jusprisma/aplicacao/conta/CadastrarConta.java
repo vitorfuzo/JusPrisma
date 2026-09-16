@@ -1,10 +1,12 @@
 package br.com.jusprisma.aplicacao.conta;
 
 import br.com.jusprisma.aplicacao.porta.CodificadorDeSenha;
+import br.com.jusprisma.aplicacao.plano.RepositorioDeAssinatura;
 import br.com.jusprisma.aplicacao.porta.EscopoDeTenant;
 import br.com.jusprisma.dominio.conta.Email;
 import br.com.jusprisma.dominio.conta.Tenant;
 import br.com.jusprisma.dominio.conta.Usuario;
+import br.com.jusprisma.dominio.plano.Assinatura;
 import org.springframework.stereotype.Service;
 
 /**
@@ -15,19 +17,26 @@ public class CadastrarConta {
 
     private static final int TAMANHO_MINIMO_DA_SENHA = 10;
 
+    /** Toda conta nova comeca na degustacao paga de 14 dias. */
+    private static final String PLANO_INICIAL = "DEGUSTACAO";
+    private static final java.time.Duration DURACAO_DO_TRIAL = java.time.Duration.ofDays(14);
+
     private final RepositorioDeConta repositorio;
     private final CodificadorDeSenha codificador;
     private final EscopoDeTenant escopo;
     private final VerificacaoDeEmail verificacao;
+    private final RepositorioDeAssinatura assinaturas;
 
     public CadastrarConta(RepositorioDeConta repositorio,
                           CodificadorDeSenha codificador,
                           EscopoDeTenant escopo,
-                          VerificacaoDeEmail verificacao) {
+                          VerificacaoDeEmail verificacao,
+                          RepositorioDeAssinatura assinaturas) {
         this.repositorio = repositorio;
         this.codificador = codificador;
         this.escopo = escopo;
         this.verificacao = verificacao;
+        this.assinaturas = assinaturas;
     }
 
     public record Comando(
@@ -59,6 +68,10 @@ public class CadastrarConta {
         escopo.executarComo(tenant.id(), () -> {
             repositorio.salvarTenant(tenant);
             repositorio.salvarUsuario(dono, senhaHash);
+            // Assinatura na mesma transacao: conta sem assinatura nao consegue fazer nada,
+            // porque toda cota e resolvida a partir do plano vigente.
+            assinaturas.registrar(Assinatura.iniciarTrial(
+                    tenant.id(), PLANO_INICIAL, java.time.Instant.now().plus(DURACAO_DO_TRIAL)));
         });
 
         // Depois do commit, e dentro do proprio caso de uso: cadastro sem e-mail de

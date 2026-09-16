@@ -8,6 +8,9 @@ dependencies {
     // roda — as migrations não são aplicadas e o erro aparece como "relation does not exist".
     implementation 'org.springframework.boot:spring-boot-flyway'
     implementation libs.pgvector
+    // Leitura do JSONB de limites de plano. Declarado aqui de proposito: o modulo
+    // nao deve depender de o Jackson chegar por transitividade de outro starter.
+    implementation 'tools.jackson.core:jackson-databind'
     runtimeOnly 'org.postgresql:postgresql'
 
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
