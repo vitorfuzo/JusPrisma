@@ -47,6 +47,19 @@ public record Usuario(
                 UUID.randomUUID(), tenantId, email, Papel.OWNER, oab, ufOab, null, Instant.now());
     }
 
+    /**
+     * Cria o usuário que acabou de aceitar um convite.
+     *
+     * <p>Nasce com o e-mail já verificado: clicar no link do convite prova acesso à caixa,
+     * que é exatamente o que a verificação de endereço existe para provar. Mandar outro
+     * link em seguida seria ritual sem função.
+     */
+    public static Usuario membroVerificado(
+            UUID tenantId, Email email, Papel papel, String oab, String ufOab) {
+        Instant agora = Instant.now();
+        return new Usuario(UUID.randomUUID(), tenantId, email, papel, oab, ufOab, agora, agora);
+    }
+
     public boolean emailVerificado() {
         return emailVerificadoEm != null;
     }

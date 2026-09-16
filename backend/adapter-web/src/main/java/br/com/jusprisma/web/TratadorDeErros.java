@@ -5,6 +5,8 @@ import br.com.jusprisma.aplicacao.conta.CredenciaisInvalidasException;
 import br.com.jusprisma.aplicacao.conta.EmailJaCadastradoException;
 import br.com.jusprisma.aplicacao.conta.SenhaFracaException;
 import br.com.jusprisma.aplicacao.conta.SessaoInvalidaException;
+import br.com.jusprisma.aplicacao.conta.ConviteInvalidoException;
+import br.com.jusprisma.aplicacao.conta.OperacaoNaoPermitidaException;
 import br.com.jusprisma.aplicacao.conta.TokenInvalidoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +51,18 @@ public class TratadorDeErros {
         // "este link ja foi usado" confirma a quem interceptou o e-mail que ele existiu.
         return problema(HttpStatus.GONE, "Link inválido",
                 "Este link é inválido ou expirou. Solicite outro.");
+    }
+
+    @ExceptionHandler(ConviteInvalidoException.class)
+    public ProblemDetail conviteInvalido(ConviteInvalidoException e) {
+        return problema(HttpStatus.GONE, "Convite inválido",
+                "Este convite é inválido, expirou ou já foi usado.");
+    }
+
+    @ExceptionHandler(OperacaoNaoPermitidaException.class)
+    public ProblemDetail operacaoNaoPermitida(OperacaoNaoPermitidaException e) {
+        // 403, nao 401: quem chegou aqui esta autenticado, so nao tem o papel necessario.
+        return problema(HttpStatus.FORBIDDEN, "Operação não permitida", e.getMessage());
     }
 
     @ExceptionHandler(ContaIndisponivelException.class)

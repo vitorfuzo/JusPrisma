@@ -12,4 +12,6 @@ public interface EnviadorDeEmail {
     void enviarVerificacaoDeEmail(String destinatario, String segredoDoToken);
 
     void enviarRecuperacaoDeSenha(String destinatario, String segredoDoToken);
+
+    void enviarConvite(String destinatario, String segredoDoConvite);
 }

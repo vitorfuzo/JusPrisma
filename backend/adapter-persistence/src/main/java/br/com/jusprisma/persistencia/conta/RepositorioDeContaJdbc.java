@@ -41,8 +41,10 @@ public class RepositorioDeContaJdbc implements RepositorioDeConta {
     public void salvarUsuario(Usuario usuario, String senhaHash) {
         try {
             jdbc.sql("""
-                    INSERT INTO usuario (id, tenant_id, email, senha_hash, papel, oab, uf_oab, criado_em)
-                    VALUES (:id, :tenantId, :email, :senhaHash, :papel, :oab, :ufOab, :criadoEm)
+                    INSERT INTO usuario (id, tenant_id, email, senha_hash, papel, oab, uf_oab,
+                                         email_verificado_em, criado_em)
+                    VALUES (:id, :tenantId, :email, :senhaHash, :papel, :oab, :ufOab,
+                            :emailVerificadoEm, :criadoEm)
                     """)
                     .param("id", usuario.id())
                     .param("tenantId", usuario.tenantId())
@@ -51,6 +53,11 @@ public class RepositorioDeContaJdbc implements RepositorioDeConta {
                     .param("papel", usuario.papel().name())
                     .param("oab", usuario.oab())
                     .param("ufOab", usuario.ufOab())
+                    // Quem aceita convite ja nasce verificado: clicar no link provou acesso
+                    // a caixa. Omitir este campo no INSERT fazia o dominio dizer "verificado"
+                    // e o banco gravar nulo, em silencio.
+                    .param("emailVerificadoEm", usuario.emailVerificadoEm() == null
+                            ? null : Timestamp.from(usuario.emailVerificadoEm()))
                     .param("criadoEm", Timestamp.from(usuario.criadoEm()))
                     .update();
         } catch (DuplicateKeyException e) {

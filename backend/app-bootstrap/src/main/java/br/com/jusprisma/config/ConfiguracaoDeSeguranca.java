@@ -63,7 +63,12 @@ public class ConfiguracaoDeSeguranca {
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/contas/verificacao",
                                 "/api/v1/senha/recuperacao",
-                                "/api/v1/senha/redefinicao").permitAll()
+                                "/api/v1/senha/redefinicao",
+                                "/api/v1/convites/aceite").permitAll()
+                        // Examinar o convite tambem e publico: quem foi convidado precisa
+                        // ver de qual escritorio se trata antes de aceitar, e ainda nao tem
+                        // conta para se autenticar.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/convites/pendente").permitAll()
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated())

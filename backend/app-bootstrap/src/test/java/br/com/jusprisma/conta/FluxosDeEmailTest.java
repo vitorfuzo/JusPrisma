@@ -1,7 +1,6 @@
 package br.com.jusprisma.conta;
 
 import br.com.jusprisma.JusPrismaApplication;
-import br.com.jusprisma.aplicacao.porta.EnviadorDeEmail;
 import br.com.jusprisma.web.seguranca.CookieDeRenovacao;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
@@ -9,10 +8,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -24,9 +20,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.ArrayList;
 import java.util.Base64;
-import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * que é o bug clássico desses fluxos, e o que faz o usuário ver "link inválido" num link
  * legítimo.
  */
-@SpringBootTest(classes = {JusPrismaApplication.class, FluxosDeEmailTest.EmailDeTeste.class})
+@SpringBootTest(classes = {JusPrismaApplication.class, CaixaDeSaidaDeTeste.Configuracao.class})
 @AutoConfigureMockMvc
 @Testcontainers
 class FluxosDeEmailTest {
@@ -74,49 +68,6 @@ class FluxosDeEmailTest {
         registro.add("jusprisma.cookie.seguro", () -> false);
     }
 
-    /** Captura o que teria sido enviado, preservando o token gerado pela aplicação. */
-    record Enviado(String destinatario, String finalidade, String token) {
-    }
-
-    static class CaixaDeSaida implements EnviadorDeEmail {
-
-        private final List<Enviado> enviados = new ArrayList<>();
-
-        @Override
-        public synchronized void enviarVerificacaoDeEmail(String destinatario, String token) {
-            enviados.add(new Enviado(destinatario, "VERIFICACAO", token));
-        }
-
-        @Override
-        public synchronized void enviarRecuperacaoDeSenha(String destinatario, String token) {
-            enviados.add(new Enviado(destinatario, "RECUPERACAO", token));
-        }
-
-        synchronized void limpar() {
-            enviados.clear();
-        }
-
-        synchronized Enviado ultimo(String finalidade) {
-            return enviados.reversed().stream()
-                    .filter(e -> e.finalidade().equals(finalidade))
-                    .findFirst()
-                    .orElseThrow(() -> new AssertionError("nenhum e-mail de " + finalidade));
-        }
-
-        synchronized List<Enviado> todos() {
-            return List.copyOf(enviados);
-        }
-    }
-
-    @TestConfiguration
-    static class EmailDeTeste {
-        @Bean
-        @Primary
-        CaixaDeSaida caixaDeSaida() {
-            return new CaixaDeSaida();
-        }
-    }
-
     @Autowired
     private MockMvc mockMvc;
 
@@ -124,7 +75,7 @@ class FluxosDeEmailTest {
     private ObjectMapper json;
 
     @Autowired
-    private CaixaDeSaida caixa;
+    private CaixaDeSaidaDeTeste caixa;
 
     @BeforeEach
     void limparCaixa() {
@@ -143,7 +94,7 @@ class FluxosDeEmailTest {
                 .as("recém-cadastrado ainda não verificou")
                 .isFalse();
 
-        confirmar(caixa.ultimo("VERIFICACAO").token()).andExpect(status().isNoContent());
+        confirmar(caixa.ultimo("VERIFICACAO").segredo()).andExpect(status().isNoContent());
 
         assertThat(entrar(email, SENHA_ORIGINAL).get("emailVerificado").asBoolean())
                 .as("depois do link, verificado")
@@ -154,7 +105,7 @@ class FluxosDeEmailTest {
     @DisplayName("o link de verificação não vale duas vezes")
     void linkDeVerificacaoEhDeUsoUnico() throws Exception {
         criarConta();
-        String token = caixa.ultimo("VERIFICACAO").token();
+        String token = caixa.ultimo("VERIFICACAO").segredo();
 
         confirmar(token).andExpect(status().isNoContent());
         confirmar(token).andExpect(status().isGone());
@@ -167,7 +118,7 @@ class FluxosDeEmailTest {
         caixa.limpar();
 
         solicitarRecuperacao(email);
-        String tokenDeSenha = caixa.ultimo("RECUPERACAO").token();
+        String tokenDeSenha = caixa.ultimo("RECUPERACAO").segredo();
 
         // Os dois tipos vivem na mesma tabela; sem conferir a finalidade, este link
         // verificaria o e-mail sem que ninguém tivesse provado ter acesso à caixa.
@@ -203,7 +154,7 @@ class FluxosDeEmailTest {
         caixa.limpar();
         solicitarRecuperacao(email);
 
-        redefinir(caixa.ultimo("RECUPERACAO").token(), SENHA_NOVA)
+        redefinir(caixa.ultimo("RECUPERACAO").segredo(), SENHA_NOVA)
                 .andExpect(status().isNoContent());
 
         mockMvc.perform(post("/api/v1/sessoes")
@@ -231,7 +182,7 @@ class FluxosDeEmailTest {
 
         caixa.limpar();
         solicitarRecuperacao(email);
-        redefinir(caixa.ultimo("RECUPERACAO").token(), SENHA_NOVA)
+        redefinir(caixa.ultimo("RECUPERACAO").segredo(), SENHA_NOVA)
                 .andExpect(status().isNoContent());
 
         // Quem troca a senha costuma fazê-lo por suspeitar de acesso indevido. Se a sessão
@@ -248,10 +199,10 @@ class FluxosDeEmailTest {
         caixa.limpar();
 
         solicitarRecuperacao(email);
-        String primeiro = caixa.ultimo("RECUPERACAO").token();
+        String primeiro = caixa.ultimo("RECUPERACAO").segredo();
 
         solicitarRecuperacao(email);
-        String segundo = caixa.ultimo("RECUPERACAO").token();
+        String segundo = caixa.ultimo("RECUPERACAO").segredo();
 
         assertThat(segundo).isNotEqualTo(primeiro);
         redefinir(primeiro, SENHA_NOVA).andExpect(status().isGone());
@@ -264,7 +215,7 @@ class FluxosDeEmailTest {
         String email = criarConta();
         caixa.limpar();
         solicitarRecuperacao(email);
-        String token = caixa.ultimo("RECUPERACAO").token();
+        String token = caixa.ultimo("RECUPERACAO").segredo();
 
         redefinir(token, "curta").andExpect(status().isBadRequest());
         redefinir(token, SENHA_NOVA).andExpect(status().isNoContent());

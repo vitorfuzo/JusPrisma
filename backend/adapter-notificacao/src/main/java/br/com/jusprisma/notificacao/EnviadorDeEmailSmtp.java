@@ -53,6 +53,15 @@ public class EnviadorDeEmailSmtp implements EnviadorDeEmail {
                 1);
     }
 
+    @Override
+    public void enviarConvite(String destinatario, String segredoDoConvite) {
+        enviar(destinatario,
+                "Voce foi convidado para um escritorio no JusPrisma",
+                "email/convite",
+                link("/aceitar-convite", segredoDoConvite),
+                168);
+    }
+
     private void enviar(String destinatario, String assunto, String template,
                         String link, int validadeEmHoras) {
         Context contexto = new Context(Locale.of("pt", "BR"));
