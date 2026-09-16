@@ -182,7 +182,7 @@ runtime ou simplesmente não faz nada.
 | Fonte | Uso | Auth | Cuidado |
 |---|---|---|---|
 | TJDFT `POST jurisdf.tjdft.jus.br/api/v1/pesquisa` | acórdãos: `nomeRelator`, `ementa`, `decisao`, agregações | nenhuma | **não devolve inteiro teor** (ver abaixo) |
-| DataJud `POST api-publica.datajud.cnj.jus.br/api_publica_{alias}/_search` | metadados + `movimentos` codificados de 182 tribunais | chave do CNJ | sem nome de juiz, sem texto |
+| DataJud `POST api-publica.datajud.cnj.jus.br/api_publica_{alias}/_search` | metadados + `movimentos` codificados de 182 tribunais | chave publica do wiki | sem nome de juiz, sem texto |
 | DJEN `GET comunicaapi.pje.jus.br/api/v1/comunicacao` | publicações, prazos, decisões de 1º grau | nenhuma | geobloqueio; máx 50/página; ~500ms entre chamadas |
 
 **O contrato real e verificado de cada uma está em `docs/fontes-de-dados.md`** — e ele

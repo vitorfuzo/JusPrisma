@@ -115,14 +115,55 @@ registros de profundidade — sem degradação nem erro.
 
 ```http
 POST https://api-publica.datajud.cnj.jus.br/api_publica_{alias}/_search
-Authorization: <chave obtida no cadastro do CNJ>
+Authorization: APIKey <chave publica do wiki>
 ```
 
-**Status: não verificado.** A chave exige cadastro no CNJ e ainda não foi obtida. O
-adaptador está escrito contra a documentação oficial e precisa de smoke test antes de ser
-considerado confiável.
+**Status: verificado em 16/09/2026.**
+
+**Não existe cadastro.** O briefing dizia que a chave exigia registro no CNJ; não exige. É
+uma **chave pública única**, publicada em
+[datajud-wiki.cnj.jus.br/api-publica/acesso](https://datajud-wiki.cnj.jus.br/api-publica/acesso/),
+e o CNJ pode trocá-la a qualquer momento. O cabeçalho é `Authorization: APIKey <chave>` —
+**não** `Bearer`.
 
 Corpo em Elasticsearch DSL; paginação por `search_after` ordenando por `@timestamp`.
+
+### Quatro armadilhas verificadas contra a API real
+
+Todas silenciosas: nenhuma gera erro, todas produzem dado errado.
+
+**1. `numeroProcesso` vem sem máscara, e o TJDFT vem com.**
+
+```
+DataJud : 07085934820238070018      (20 dígitos)
+TJDFT   : 0709116-94.2022.8.07.0018 (25 caracteres, formatado)
+```
+
+Esta é a chave de junção entre as duas fontes. Comparar as formas cruas não casa **nenhum**
+processo, e o sintoma é "o DataJud não tem esses processos" em vez de erro. A junção tem
+que ser feita sobre os 20 dígitos, com a máscara removida dos dois lados.
+
+**2. A acentuação vem corrompida na origem.**
+
+```
+"5? VARA DA FAZENDA P?BLICA E SA?DE P?BLICA DO DF"
+"3? VARA C?VEL DE TAGUATINGA"
+```
+
+Verificado nos bytes: é literalmente `0x3F` (o caractere `?`), não problema de terminal. O
+dado está corrompido no índice do CNJ. **Nome de órgão julgador vindo do DataJud não serve
+para exibição** — use o do TJDFT, que vem correto, e trate o do DataJud apenas como chave
+aproximada de correspondência.
+
+**3. `dataAjuizamento` não é ISO-8601.**
+
+Vem como string `"20230728124939"` — `yyyyMMddHHmmss`. Passar isso para um parser de ISO
+falha; passar para um parser leniente pode produzir data errada em silêncio.
+
+**4. `hits.total` para em 10.000 por padrão.**
+
+É o teto do Elasticsearch, não o total real. Sem `"track_total_hits": true`, qualquer
+contagem acima disso mente. O TJDFT tem **541.030** processos no índice, não 10.000.
 
 O que o DataJud acrescenta ao que já temos do TJDFT:
 
