@@ -5,6 +5,7 @@ dependencies {
     // apenas monta adaptadores.
     implementation project(':backend:core-application')
     implementation project(':backend:adapter-web')
+    implementation 'org.springframework.security:spring-security-oauth2-jose'
     implementation project(':backend:adapter-persistence')
     implementation project(':backend:adapter-ingestion')
     implementation project(':backend:adapter-ai')

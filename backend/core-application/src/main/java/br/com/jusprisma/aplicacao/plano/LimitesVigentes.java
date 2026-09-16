@@ -61,11 +61,17 @@ public class LimitesVigentes {
      */
     public void exigirEspacoEm(UUID tenantId, Cota cota, int jaConsumido) {
         LimitesDoPlano limites = de(tenantId);
-        if (!limites.cabeMais(cota, jaConsumido)) {
-            throw new CotaExcedidaException(cota,
-                    "o plano permite %s e já há %d em uso"
-                            .formatted(limites.descricao(cota), jaConsumido));
+        if (limites.cabeMais(cota, jaConsumido)) {
+            return;
         }
+
+        // Duas situações diferentes, e a mensagem precisa distinguir: o plano não oferece
+        // o recurso, ou oferece e a cota acabou. Dizer "permite 0 e já há 0 em uso" para o
+        // primeiro caso confunde exatamente quem está decidindo se faz upgrade.
+        throw new CotaExcedidaException(cota, limites.teto(cota).orElse(0) == 0
+                ? "seu plano não inclui este recurso"
+                : "seu plano permite %d e você já usa %d"
+                        .formatted(limites.teto(cota).getAsInt(), jaConsumido));
     }
 
     public void exigirRecurso(UUID tenantId, Recurso recurso) {

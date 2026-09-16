@@ -18,7 +18,13 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import br.com.jusprisma.web.seguranca.EmissorDeAcesso;
+
+import java.util.List;
 
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
@@ -73,12 +79,41 @@ public class ConfiguracaoDeSeguranca {
                         // Exigir autenticacao impediria mostra-lo a quem ainda nao tem conta,
                         // que e' justamente quem precisa ve-lo.
                         .requestMatchers(HttpMethod.GET, "/api/v1/planos").permitAll()
+                        // Login de operador e' publico; o resto do painel exige escopo
+                        // administrativo. A separacao acontece aqui, antes do controller:
+                        // token de cliente nao abre o painel, e token de operador nao abre
+                        // as rotas de cliente.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/admin/sessoes").permitAll()
+                        .requestMatchers("/api/v1/admin/**").hasAuthority("ESCOPO_ADMIN")
+                        .requestMatchers("/api/v1/**").hasAuthority("ESCOPO_TENANT")
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated())
-                .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()));
+                .oauth2ResourceServer(oauth -> oauth.jwt(jwt ->
+                        jwt.jwtAuthenticationConverter(conversorDeEscopo())));
 
         return http.build();
+    }
+
+    /**
+     * Transforma a claim de escopo do token em autoridade do Spring Security.
+     *
+     * <p>E' o que permite separar painel de cliente na propria cadeia de filtros. Deixar
+     * essa verificacao para dentro do controller funcionaria ate alguem criar uma rota nova
+     * e esquecer de conferir - e a rota esquecida seria justamente a que da acesso a todos
+     * os escritorios.
+     */
+    private static JwtAuthenticationConverter conversorDeEscopo() {
+        JwtAuthenticationConverter conversor = new JwtAuthenticationConverter();
+        conversor.setJwtGrantedAuthoritiesConverter(jwt -> {
+            String escopo = jwt.getClaimAsString(EmissorDeAcesso.CLAIM_ESCOPO);
+            if (escopo == null || escopo.isBlank()) {
+                // Token sem escopo nao ganha autoridade nenhuma: falha fechado, como o RLS.
+                return List.of();
+            }
+            return List.of(new SimpleGrantedAuthority("ESCOPO_" + escopo));
+        });
+        return conversor;
     }
 
     @Bean
