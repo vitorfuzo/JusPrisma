@@ -1,0 +1,32 @@
+# Java / Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+*.class
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Ambiente — NUNCA versionar segredo
+.env
+.env.local
+*.pem
+*.key
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Saídas locais de smoke test contra API real
+/tmp-smoke/
