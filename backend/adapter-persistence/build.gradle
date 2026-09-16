@@ -3,6 +3,10 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-database-postgresql'
+    // Boot 4 tirou as auto-configurações de spring-boot-autoconfigure e as distribuiu em
+    // módulos próprios. Sem este artefato o Flyway está no classpath e simplesmente não
+    // roda — as migrations não são aplicadas e o erro aparece como "relation does not exist".
+    implementation 'org.springframework.boot:spring-boot-flyway'
     implementation libs.pgvector
     runtimeOnly 'org.postgresql:postgresql'
 
