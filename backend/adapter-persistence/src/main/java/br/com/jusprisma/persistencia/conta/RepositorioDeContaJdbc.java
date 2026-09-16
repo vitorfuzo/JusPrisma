@@ -99,6 +99,39 @@ public class RepositorioDeContaJdbc implements RepositorioDeConta {
                 .optional();
     }
 
+    @Override
+    public Optional<ContaLocalizada> localizarPorEmail(Email email) {
+        // Função SECURITY DEFINER: ver V4__tokens_de_conta.sql.
+        return jdbc.sql("""
+                SELECT usuario_id, tenant_id FROM conta_por_email(:email)
+                """)
+                .param("email", email.valor())
+                .query((rs, linha) -> new ContaLocalizada(
+                        rs.getObject("usuario_id", java.util.UUID.class),
+                        rs.getObject("tenant_id", java.util.UUID.class)))
+                .optional();
+    }
+
+    @Override
+    public void marcarEmailVerificado(java.util.UUID usuarioId) {
+        jdbc.sql("""
+                UPDATE usuario SET email_verificado_em = now()
+                 WHERE id = :id AND email_verificado_em IS NULL
+                """)
+                .param("id", usuarioId)
+                .update();
+    }
+
+    @Override
+    public void trocarSenha(java.util.UUID usuarioId, String senhaHash) {
+        jdbc.sql("""
+                UPDATE usuario SET senha_hash = :hash WHERE id = :id
+                """)
+                .param("hash", senhaHash)
+                .param("id", usuarioId)
+                .update();
+    }
+
     private static java.time.Instant instante(java.sql.ResultSet rs, String coluna)
             throws java.sql.SQLException {
         Timestamp valor = rs.getTimestamp(coluna);

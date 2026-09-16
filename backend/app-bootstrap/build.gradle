@@ -8,13 +8,13 @@ dependencies {
     implementation project(':backend:adapter-persistence')
     implementation project(':backend:adapter-ingestion')
     implementation project(':backend:adapter-ai')
+    implementation project(':backend:adapter-notificacao')
     implementation project(':backend:adapter-billing')
     implementation project(':backend:worker-pipeline')
 
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    implementation 'org.springframework.boot:spring-boot-starter-mail'
 
     // Boot 4 separou o suporte de teste web num starter proprio; e dele que vem
     // o MockMvc e o Jackson usados nos testes de borda.

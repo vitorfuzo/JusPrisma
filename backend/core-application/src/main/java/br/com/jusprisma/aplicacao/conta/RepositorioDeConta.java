@@ -40,4 +40,20 @@ public interface RepositorioDeConta {
      * escritório não é encontrado, mesmo com o id correto em mãos.
      */
     Optional<Usuario> buscarPorId(java.util.UUID id);
+
+    /**
+     * Identificadores da conta dona de um e-mail, para a recuperação de senha.
+     *
+     * <p>Atravessa a fronteira de tenant como o login, e pela mesma razão: quem esqueceu a
+     * senha não está autenticado. Devolve só identificadores — a resposta ao usuário é
+     * idêntica exista ou não a conta, então nada aqui pode virar canal de enumeração.
+     */
+    Optional<ContaLocalizada> localizarPorEmail(Email email);
+
+    void marcarEmailVerificado(java.util.UUID usuarioId);
+
+    void trocarSenha(java.util.UUID usuarioId, String senhaHash);
+
+    record ContaLocalizada(java.util.UUID usuarioId, java.util.UUID tenantId) {
+    }
 }

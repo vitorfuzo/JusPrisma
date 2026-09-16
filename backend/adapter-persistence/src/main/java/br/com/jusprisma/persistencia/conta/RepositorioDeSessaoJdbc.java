@@ -83,6 +83,20 @@ public class RepositorioDeSessaoJdbc implements RepositorioDeSessao {
                 .update();
     }
 
+    @Override
+    public int revogarTodasDoUsuario(UUID usuarioId, SessaoRefresh.MotivoDeRevogacao motivo) {
+        return jdbc.sql("""
+                UPDATE sessao_refresh
+                   SET revogado_em = now(),
+                       motivo_revogacao = :motivo
+                 WHERE usuario_id = :usuarioId
+                   AND revogado_em IS NULL
+                """)
+                .param("usuarioId", usuarioId)
+                .param("motivo", motivo.name())
+                .update();
+    }
+
     private static SessaoRefresh mapear(ResultSet rs, int linha) throws SQLException {
         String motivo = rs.getString("motivo_revogacao");
         return new SessaoRefresh(

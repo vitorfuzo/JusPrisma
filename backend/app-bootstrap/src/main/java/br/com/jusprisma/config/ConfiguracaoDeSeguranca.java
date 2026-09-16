@@ -58,6 +58,12 @@ public class ConfiguracaoDeSeguranca {
                         // nao pelo cabecalho Authorization: o access ja pode ter expirado.
                         .requestMatchers(HttpMethod.POST, "/api/v1/sessoes/renovacao").permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/sessoes").permitAll()
+                        // Quem clica no link do e-mail nao esta autenticado; a credencial
+                        // e o proprio token do link, conferido contra hash no banco.
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/contas/verificacao",
+                                "/api/v1/senha/recuperacao",
+                                "/api/v1/senha/redefinicao").permitAll()
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated())

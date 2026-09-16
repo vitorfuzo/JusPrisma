@@ -18,13 +18,16 @@ public class CadastrarConta {
     private final RepositorioDeConta repositorio;
     private final CodificadorDeSenha codificador;
     private final EscopoDeTenant escopo;
+    private final VerificacaoDeEmail verificacao;
 
     public CadastrarConta(RepositorioDeConta repositorio,
                           CodificadorDeSenha codificador,
-                          EscopoDeTenant escopo) {
+                          EscopoDeTenant escopo,
+                          VerificacaoDeEmail verificacao) {
         this.repositorio = repositorio;
         this.codificador = codificador;
         this.escopo = escopo;
+        this.verificacao = verificacao;
     }
 
     public record Comando(
@@ -53,11 +56,16 @@ public class CadastrarConta {
         // O escopo é aberto antes de qualquer INSERT: as policies de RLS exigem que a
         // transação já declare a qual tenant pertence o que está sendo escrito. Foi por
         // isso que o id do tenant nasceu na aplicação, e não no DEFAULT da coluna.
-        return escopo.executarComo(tenant.id(), () -> {
+        escopo.executarComo(tenant.id(), () -> {
             repositorio.salvarTenant(tenant);
             repositorio.salvarUsuario(dono, senhaHash);
-            return dono;
         });
+
+        // Depois do commit, e dentro do proprio caso de uso: cadastro sem e-mail de
+        // verificacao e cadastro pela metade, e deixar o envio a cargo de quem chama faria
+        // um segundo ponto de entrada esquece-lo mais cedo ou mais tarde.
+        verificacao.enviar(tenant.id(), dono.id(), email);
+        return dono;
     }
 
     private void validarSenha(String senha) {

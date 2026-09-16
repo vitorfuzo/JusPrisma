@@ -27,4 +27,7 @@ public interface RepositorioDeSessao {
     boolean consumir(UUID id);
 
     int revogarFamilia(UUID familiaId, SessaoRefresh.MotivoDeRevogacao motivo);
+
+    /** Derruba todas as sessões vivas de um usuário, em todas as famílias. */
+    int revogarTodasDoUsuario(UUID usuarioId, SessaoRefresh.MotivoDeRevogacao motivo);
 }

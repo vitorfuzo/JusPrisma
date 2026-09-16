@@ -1,0 +1,10 @@
+// Envio de e-mail transacional. Adaptador da porta EnviadorDeEmail.
+//
+// Módulo próprio, e não uma classe solta em app-bootstrap: notificação é uma fronteira
+// externa como qualquer outra e vai trocar de provedor (SMTP hoje, API de entrega quando
+// houver volume e necessidade de métrica de abertura).
+dependencies {
+    implementation project(':backend:core-application')
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+}

@@ -5,6 +5,7 @@ import br.com.jusprisma.aplicacao.conta.CredenciaisInvalidasException;
 import br.com.jusprisma.aplicacao.conta.EmailJaCadastradoException;
 import br.com.jusprisma.aplicacao.conta.SenhaFracaException;
 import br.com.jusprisma.aplicacao.conta.SessaoInvalidaException;
+import br.com.jusprisma.aplicacao.conta.TokenInvalidoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -40,6 +41,14 @@ public class TratadorDeErros {
         // a quem capturou um token se ele chegou a circular de verdade.
         return problema(HttpStatus.UNAUTHORIZED, "Sessão inválida",
                 "Faça login novamente.");
+    }
+
+    @ExceptionHandler(TokenInvalidoException.class)
+    public ProblemDetail tokenInvalido(TokenInvalidoException e) {
+        // Um unico motivo para desconhecido, expirado, ja usado e de outra finalidade:
+        // "este link ja foi usado" confirma a quem interceptou o e-mail que ele existiu.
+        return problema(HttpStatus.GONE, "Link inválido",
+                "Este link é inválido ou expirou. Solicite outro.");
     }
 
     @ExceptionHandler(ContaIndisponivelException.class)

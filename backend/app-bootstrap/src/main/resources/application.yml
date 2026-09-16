@@ -44,3 +44,8 @@ jusprisma:
     # Falso apenas em desenvolvimento sobre http; o navegador recusaria um cookie
     # Secure numa origem insegura. Em qualquer outro ambiente permanece true.
     seguro: ${JUSPRISMA_COOKIE_SEGURO:true}
+  email:
+    remetente: ${JUSPRISMA_EMAIL_REMETENTE:nao-responda@jusprisma.com.br}
+  app:
+    # Base dos links enviados por e-mail. Aponta para o frontend, nao para a API.
+    url-base: ${JUSPRISMA_APP_URL_BASE:http://localhost:5173}
