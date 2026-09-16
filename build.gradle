@@ -7,6 +7,7 @@ plugins {
 // Referenciar 'libs' dentro de subprojects{} dispara lookup implícito no projeto pai,
 // que o Gradle 10 transforma em erro.
 def versaoSpringBoot = libs.versions.springBoot.get()
+def versaoTestcontainers = libs.versions.testcontainers.get()
 
 subprojects {
     // java-library (e não apenas java) para que os módulos possam distinguir
@@ -30,6 +31,7 @@ subprojects {
     dependencyManagement {
         imports {
             mavenBom "org.springframework.boot:spring-boot-dependencies:${versaoSpringBoot}"
+            mavenBom "org.testcontainers:testcontainers-bom:${versaoTestcontainers}"
         }
     }
 

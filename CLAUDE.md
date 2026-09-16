@@ -53,7 +53,7 @@ performance. Cada uma tem teste próprio; se você tocar numa delas, o teste vem
 
 ## Stack
 
-Java 21 · Spring Boot 3.3+ · Gradle multi-módulo · arquitetura hexagonal
+Java 21 · Spring Boot 4.1 · Gradle 9.7 multi-módulo · arquitetura hexagonal
 PostgreSQL 16 + pgvector + tsvector/pg_trgm (`portuguese`) · Flyway
 Resilience4j · WebClient
 React 18 + Vite + TypeScript + TanStack Query + Tailwind + shadcn/ui
@@ -195,7 +195,7 @@ Dois fatos do TJDFT que mudam desenho, verificados em 15/09/2026:
 ## Comandos
 
 ```bash
-docker compose up -d          # postgres, adminer, mailhog
+docker compose up -d          # postgres (5432), adminer (8081), mailpit (8025)
 ./gradlew bootRun             # backend
 ./gradlew build               # build + testes
 ./gradlew test --tests "*X*"  # teste específico
