@@ -56,7 +56,7 @@ performance. Cada uma tem teste próprio; se você tocar numa delas, o teste vem
 Java 21 · Spring Boot 4.1 · Gradle 9.7 multi-módulo · arquitetura hexagonal
 PostgreSQL 16 + pgvector + tsvector/pg_trgm (`portuguese`) · Flyway
 Resilience4j · WebClient
-React 18 + Vite + TypeScript + TanStack Query + Tailwind + shadcn/ui
+React 19 + Vite 8 + TypeScript + TanStack Query + Tailwind 4 + oxlint
 JUnit 5 + Testcontainers + WireMock + AssertJ · Vitest + Testing Library
 Docker Compose no dev
 
@@ -74,6 +74,7 @@ backend/
   adapter-web/          controllers, DTOs, OpenAPI
   adapter-ingestion/    clients TJDFT, DataJud, DJEN
   adapter-ai/           Anthropic, Batch API, prompts
+  adapter-notificacao/  e-mail transacional (SMTP + templates)
   adapter-billing/      Asaas, webhooks
   worker-pipeline/      jobs de ingestão e análise
   app-bootstrap/        main, config, security
@@ -121,6 +122,40 @@ Detalhamento e alternativas descartadas em `docs/adr/0001-arquitetura.md`.
   esperar até 24h no momento da primeira compra mata a conversão.
 - **Nomes de domínio em português.** `Magistrado`, `Decisao`, `OrgaoJulgador`,
   `CreditoLancamento`. O domínio é jurídico brasileiro; traduzir só cria ambiguidade.
+- **Exceção ao RLS é sempre função `SECURITY DEFINER` estreita e nomeada**, com
+  `search_path` fixo, devolvendo o mínimo. Nunca afrouxe a policy da tabela. Já existem
+  para login, tokens de e-mail, convite, painel administrativo e jobs de cobrança — cada
+  uma documentada na própria migration com a razão de existir.
+- **Cota de plano tem duas naturezas.** Cota de consumo (perfis, IA, cálculos, consultas,
+  assinaturas) vira crédito no ledger pela `RecargaDeCreditos`; cota de estado
+  (subusuários, armazenamento) é conferida contra a situação atual por `LimitesVigentes`.
+  Confundir as duas foi um bug real: a conta nascia com saldo zero.
+- **Escopo de token separa cliente de operador** na cadeia de filtros, por autoridade —
+  não dentro do controller. Rota nova entra protegida por padrão.
+
+---
+
+## Armadilhas do Spring Boot 4
+
+Custaram tempo mais de uma vez. Todas têm o mesmo sintoma: compila, sobe, e falha em
+runtime ou simplesmente não faz nada.
+
+- **As auto-configurações saíram de `spring-boot-autoconfigure`** e foram para módulos
+  próprios. A biblioteca no classpath não basta. Já precisamos de `spring-boot-flyway`
+  (sem ele as migrations nunca rodam, e o erro aparece como "relation does not exist") e
+  `spring-boot-webclient` (sem ele não existe bean de `WebClient.Builder`). Ao adicionar
+  integração nova, procure o módulo `spring-boot-<coisa>` correspondente.
+- **Jackson 3:** a raiz de pacote é `tools.jackson`, não `com.fasterxml.jackson`.
+  `JsonNode.asText()` virou `asString()`, e `propertyNames()` devolve `Set`, não `Iterator`.
+- **Testcontainers 2.x** consolidou os módulos: `postgresql` e `junit-jupiter` viraram
+  `testcontainers-postgresql` e `testcontainers-junit-jupiter`. Os nomes antigos ainda
+  existem no Maven Central, parados no 1.x, e misturá-los com o core 2.x quebra em runtime
+  por classe sombreada removida. `PostgreSQLContainer` mudou de pacote e deixou de ser
+  genérica.
+- **O starter de teste web é `spring-boot-starter-webmvc-test`**, e `AutoConfigureMockMvc`
+  mudou para `org.springframework.boot.webmvc.test.autoconfigure`.
+- **O índice de busca do Maven Central está defasado** em relação ao que existe de fato.
+  Consulte `maven-metadata.xml` direto quando a versão importar.
 
 ---
 
