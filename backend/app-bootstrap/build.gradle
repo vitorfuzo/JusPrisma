@@ -1,0 +1,18 @@
+apply plugin: 'org.springframework.boot'
+
+dependencies {
+    implementation project(':backend:adapter-web')
+    implementation project(':backend:adapter-persistence')
+    implementation project(':backend:adapter-ingestion')
+    implementation project(':backend:adapter-ai')
+    implementation project(':backend:adapter-billing')
+    implementation project(':backend:worker-pipeline')
+
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:junit-jupiter'
+}

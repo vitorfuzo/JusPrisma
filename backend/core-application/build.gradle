@@ -1,0 +1,5 @@
+// Casos de uso e portas (interfaces). Depende só do domínio.
+dependencies {
+    api project(':backend:core-domain')
+    implementation 'org.springframework:spring-tx'
+}

@@ -1,0 +1,9 @@
+// Clients TJDFT, DataJud, DJEN. Toda chamada externa passa por Resilience4j.
+dependencies {
+    implementation project(':backend:core-application')
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    implementation libs.resilience4j.spring.boot
+    implementation libs.resilience4j.reactor
+
+    testImplementation libs.wiremock
+}

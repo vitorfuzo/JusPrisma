@@ -1,0 +1,28 @@
+# Catálogo de versões. Toda versão de dependência mora aqui, não espalhada nos módulos.
+# O que o BOM do Spring Boot já gerencia (jackson, postgresql driver, junit, assertj,
+# testcontainers-bom) não é fixado aqui — deixamos o BOM decidir.
+
+[versions]
+springBoot = "4.1.1"
+springDependencyManagement = "1.1.7"
+resilience4j = "2.4.0"
+springdoc = "3.1.1"
+pgvector = "0.1.6"
+anthropic = "2.63.0"
+openhtmltopdf = "1.0.10"
+archunit = "1.5.0"
+wiremock = "3.13.2"
+
+[libraries]
+resilience4j-spring-boot = { module = "io.github.resilience4j:resilience4j-spring-boot4", version.ref = "resilience4j" }
+resilience4j-reactor = { module = "io.github.resilience4j:resilience4j-reactor", version.ref = "resilience4j" }
+springdoc-webmvc = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
+pgvector = { module = "com.pgvector:pgvector", version.ref = "pgvector" }
+anthropic = { module = "com.anthropic:anthropic-java", version.ref = "anthropic" }
+openhtmltopdf-pdfbox = { module = "com.openhtmltopdf:openhtmltopdf-pdfbox", version.ref = "openhtmltopdf" }
+archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+wiremock = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
+
+[plugins]
+springBoot = { id = "org.springframework.boot", version.ref = "springBoot" }
+springDependencyManagement = { id = "io.spring.dependency-management", version.ref = "springDependencyManagement" }

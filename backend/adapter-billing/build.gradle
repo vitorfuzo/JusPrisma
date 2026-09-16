@@ -1,0 +1,8 @@
+// Asaas e webhooks. Gateway fica atrás de porta — vamos migrar para Pix Automático.
+dependencies {
+    implementation project(':backend:core-application')
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    implementation libs.resilience4j.spring.boot
+
+    testImplementation libs.wiremock
+}

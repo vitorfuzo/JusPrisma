@@ -1,0 +1,8 @@
+// Jobs de ingestão e análise. Consome a tabela de jobs com SKIP LOCKED.
+dependencies {
+    implementation project(':backend:core-application')
+    implementation project(':backend:adapter-persistence')
+    implementation project(':backend:adapter-ingestion')
+    implementation project(':backend:adapter-ai')
+    implementation 'org.springframework.boot:spring-boot-starter'
+}

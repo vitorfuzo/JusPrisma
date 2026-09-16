@@ -1,0 +1,59 @@
+plugins {
+    alias(libs.plugins.springBoot) apply false
+    alias(libs.plugins.springDependencyManagement) apply false
+}
+
+// Resolvido aqui, no escopo da raiz, e capturado pelo closure abaixo.
+// Referenciar 'libs' dentro de subprojects{} dispara lookup implícito no projeto pai,
+// que o Gradle 10 transforma em erro.
+def versaoSpringBoot = libs.versions.springBoot.get()
+
+subprojects {
+    // java-library (e não apenas java) para que os módulos possam distinguir
+    // 'api' de 'implementation' — core-application reexporta o domínio de propósito.
+    apply plugin: 'java-library'
+    apply plugin: 'io.spring.dependency-management'
+
+    group = 'br.com.jusprisma'
+    version = '0.0.1-SNAPSHOT'
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+    }
+
+    repositories {
+        mavenCentral()
+    }
+
+    dependencyManagement {
+        imports {
+            mavenBom "org.springframework.boot:spring-boot-dependencies:${versaoSpringBoot}"
+        }
+    }
+
+    dependencies {
+        testImplementation 'org.springframework.boot:spring-boot-starter-test'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.compilerArgs << '-Xlint:all' << '-parameters'
+    }
+
+    tasks.named('test') {
+        useJUnitPlatform {
+            // Smoke tests batem em API pública real: exigem rede e não rodam no CI.
+            // Habilite com: ./gradlew test -PcomSmoke
+            if (!project.hasProperty('comSmoke')) {
+                excludeTags 'smoke'
+            }
+        }
+        testLogging {
+            events = ['failed']
+            exceptionFormat = 'full'
+        }
+    }
+}

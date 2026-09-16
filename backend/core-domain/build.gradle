@@ -1,0 +1,5 @@
+// Entidades e regras de negócio. ZERO dependência de framework.
+// A regra é verificada pelo teste de arquitetura em ArquiteturaHexagonalTest.
+dependencies {
+    testImplementation libs.archunit.junit5
+}

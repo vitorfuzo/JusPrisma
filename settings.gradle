@@ -1,0 +1,11 @@
+rootProject.name = 'jusprisma'
+
+include 'backend:core-domain'
+include 'backend:core-application'
+include 'backend:adapter-persistence'
+include 'backend:adapter-web'
+include 'backend:adapter-ingestion'
+include 'backend:adapter-ai'
+include 'backend:adapter-billing'
+include 'backend:worker-pipeline'
+include 'backend:app-bootstrap'
