@@ -14,4 +14,11 @@ public interface EnviadorDeEmail {
     void enviarRecuperacaoDeSenha(String destinatario, String segredoDoToken);
 
     void enviarConvite(String destinatario, String segredoDoConvite);
+
+    /**
+     * Avisa que a degustacao esta terminando e que a cobranca vai comecar.
+     *
+     * <p>Converter sem avisar gera chargeback e reclamacao publica. Custa um e-mail evitar.
+     */
+    void enviarAvisoDeFimDaDegustacao(String destinatario, java.time.Instant fimDoPeriodo);
 }

@@ -57,6 +57,9 @@ public interface RepositorioDeConta {
     /** Quantos usuários o escritório tem hoje, incluindo o dono. Sujeito a RLS. */
     int contarUsuarios();
 
+    /** E-mail do dono da conta, para avisos administrativos. Sujeito a RLS. */
+    Optional<String> emailDoDonoDaConta();
+
     record ContaLocalizada(java.util.UUID usuarioId, java.util.UUID tenantId) {
     }
 }

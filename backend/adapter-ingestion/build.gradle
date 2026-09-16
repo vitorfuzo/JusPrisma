@@ -2,6 +2,10 @@
 dependencies {
     implementation project(':backend:core-application')
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    // Mesmo padrao do Flyway: o Boot 4 tirou as auto-configuracoes de
+    // spring-boot-autoconfigure. Sem este artefato nao existe bean de
+    // WebClient.Builder e a injecao falha na subida do contexto.
+    implementation 'org.springframework.boot:spring-boot-webclient'
     implementation libs.resilience4j.spring.boot
     implementation libs.resilience4j.reactor
 

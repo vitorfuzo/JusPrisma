@@ -34,6 +34,28 @@ logging:
     # No formato legível o correlacaoId entra entre colchetes, logo antes do logger.
     correlation: "[${spring.application.name:jusprisma},%X{correlacaoId:-}] "
 
+resilience4j:
+  retry:
+    instances:
+      jobs:
+    habilitados: ${JUSPRISMA_JOBS_HABILITADOS:true}
+  asaas:
+        max-attempts: 3
+        wait-duration: 500ms
+        # Backoff exponencial: repetir em intervalo fixo contra um servico que esta se
+        # recuperando de sobrecarga so prolonga a sobrecarga.
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+  circuitbreaker:
+    instances:
+      jobs:
+    habilitados: ${JUSPRISMA_JOBS_HABILITADOS:true}
+  asaas:
+        sliding-window-size: 20
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+
 management:
   endpoints:
     web:
@@ -68,3 +90,11 @@ jusprisma:
     email: ${JUSPRISMA_OPERADOR_INICIAL_EMAIL:}
     senha: ${JUSPRISMA_OPERADOR_INICIAL_SENHA:}
     nome: ${JUSPRISMA_OPERADOR_INICIAL_NOME:Operador}
+  jobs:
+    habilitados: ${JUSPRISMA_JOBS_HABILITADOS:true}
+  asaas:
+    url-base: ${JUSPRISMA_ASAAS_BASE_URL:https://api-sandbox.asaas.com/v3}
+    chave: ${JUSPRISMA_ASAAS_API_KEY:}
+    # Token que o Asaas envia no cabecalho da notificacao. Sem ele configurado, toda
+    # notificacao e' recusada - a rota e' publica e aceitar sem conferir e' pior que negar.
+    token-webhook: ${JUSPRISMA_ASAAS_WEBHOOK_TOKEN:}

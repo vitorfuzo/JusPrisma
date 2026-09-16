@@ -21,6 +21,7 @@ public class CaixaDeSaidaDeTeste implements EnviadorDeEmail {
     public static final String VERIFICACAO = "VERIFICACAO";
     public static final String RECUPERACAO = "RECUPERACAO";
     public static final String CONVITE = "CONVITE";
+    public static final String FIM_DA_DEGUSTACAO = "FIM_DA_DEGUSTACAO";
 
     public record Enviado(String destinatario, String finalidade, String segredo) {
     }
@@ -40,6 +41,13 @@ public class CaixaDeSaidaDeTeste implements EnviadorDeEmail {
     @Override
     public synchronized void enviarConvite(String destinatario, String segredo) {
         enviados.add(new Enviado(destinatario, CONVITE, segredo));
+    }
+
+    @Override
+    public synchronized void enviarAvisoDeFimDaDegustacao(
+            String destinatario, java.time.Instant fimDoPeriodo) {
+        // O segredo aqui e' a data do fim, que e' o que o teste do ciclo precisa conferir.
+        enviados.add(new Enviado(destinatario, FIM_DA_DEGUSTACAO, fimDoPeriodo.toString()));
     }
 
     public synchronized void limpar() {

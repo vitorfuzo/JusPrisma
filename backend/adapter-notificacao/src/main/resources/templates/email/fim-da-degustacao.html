@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pt-BR">
+<head><meta charset="UTF-8"><title>Sua degustação está terminando</title></head>
+<body style="font-family: system-ui, -apple-system, Segoe UI, Arial, sans-serif; color:#1f2328; line-height:1.5;">
+  <h2 style="margin:0 0 16px;">Sua degustação termina em <span th:text="${fimDoPeriodo}">breve</span></h2>
+  <p>Depois dessa data, sua conta passa para o plano contratado e a cobrança começa
+     automaticamente.</p>
+  <p>Se quiser continuar, não é preciso fazer nada. Se preferir não seguir, cancele antes
+     do fim do período e nada será cobrado.</p>
+  <p style="margin:24px 0;">
+    <a th:href="${link}"
+       style="background:#1f3a8a;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;display:inline-block;">
+      Ver planos e cancelar
+    </a>
+  </p>
+  <p style="font-size:14px;color:#57606a;">
+    Estamos avisando com antecedência de propósito: ninguém deve ser cobrado por
+    esquecimento.
+  </p>
+</body>
+</html>

@@ -146,6 +146,15 @@ public class RepositorioDeContaJdbc implements RepositorioDeConta {
                 .single();
     }
 
+    @Override
+    public Optional<String> emailDoDonoDaConta() {
+        return jdbc.sql("""
+                SELECT email FROM usuario WHERE papel = 'OWNER' ORDER BY criado_em LIMIT 1
+                """)
+                .query(String.class)
+                .optional();
+    }
+
     private static java.time.Instant instante(java.sql.ResultSet rs, String coluna)
             throws java.sql.SQLException {
         Timestamp valor = rs.getTimestamp(coluna);

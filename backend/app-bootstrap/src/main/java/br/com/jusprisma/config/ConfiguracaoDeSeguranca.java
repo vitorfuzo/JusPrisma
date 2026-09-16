@@ -84,6 +84,9 @@ public class ConfiguracaoDeSeguranca {
                         // token de cliente nao abre o painel, e token de operador nao abre
                         // as rotas de cliente.
                         .requestMatchers(HttpMethod.POST, "/api/v1/admin/sessoes").permitAll()
+                        // Webhook nao faz login: quem autentica e' o token proprio do
+                        // gateway, conferido em tempo constante dentro do controller.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/**").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasAuthority("ESCOPO_ADMIN")
                         .requestMatchers("/api/v1/**").hasAuthority("ESCOPO_TENANT")
                         .requestMatchers("/actuator/health/**").permitAll()

@@ -62,12 +62,30 @@ public class EnviadorDeEmailSmtp implements EnviadorDeEmail {
                 168);
     }
 
+    @Override
+    public void enviarAvisoDeFimDaDegustacao(String destinatario, java.time.Instant fimDoPeriodo) {
+        Context contexto = new Context(Locale.of("pt", "BR"));
+        contexto.setVariable("fimDoPeriodo", java.time.format.DateTimeFormatter
+                .ofPattern("d 'de' MMMM", Locale.of("pt", "BR"))
+                .withZone(java.time.ZoneId.of("America/Sao_Paulo"))
+                .format(fimDoPeriodo));
+        contexto.setVariable("link", baseDaAplicacao + "/planos");
+
+        enviarComContexto(destinatario, "Sua degustacao do JusPrisma esta terminando",
+                "email/fim-da-degustacao", contexto);
+    }
+
     private void enviar(String destinatario, String assunto, String template,
                         String link, int validadeEmHoras) {
         Context contexto = new Context(Locale.of("pt", "BR"));
         contexto.setVariable("link", link);
         contexto.setVariable("validadeEmHoras", validadeEmHoras);
 
+        enviarComContexto(destinatario, assunto, template, contexto);
+    }
+
+    private void enviarComContexto(String destinatario, String assunto, String template,
+                                   Context contexto) {
         try {
             MimeMessage mensagem = remetente.createMimeMessage();
             MimeMessageHelper ajudante = new MimeMessageHelper(
