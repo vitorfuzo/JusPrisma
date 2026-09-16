@@ -1,6 +1,9 @@
 apply plugin: 'org.springframework.boot'
 
 dependencies {
+    // Depende direto do core porque implementa portas (CodificadorDeSenha) e nao
+    // apenas monta adaptadores.
+    implementation project(':backend:core-application')
     implementation project(':backend:adapter-web')
     implementation project(':backend:adapter-persistence')
     implementation project(':backend:adapter-ingestion')
@@ -9,10 +12,18 @@ dependencies {
     implementation project(':backend:worker-pipeline')
 
     implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-mail'
 
+    // Boot 4 separou o suporte de teste web num starter proprio; e dele que vem
+    // o MockMvc e o Jackson usados nos testes de borda.
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
-    testImplementation 'org.testcontainers:postgresql'
-    testImplementation 'org.testcontainers:junit-jupiter'
+    // Testcontainers 2.x renomeou os modulos: 'postgresql' e 'junit-jupiter'
+    // viraram 'testcontainers-postgresql' e 'testcontainers-junit-jupiter'.
+    // Os nomes antigos ainda existem no Maven Central parados no 1.x, e mistura-los
+    // com o core 2.x quebra em runtime por classe sombreada removida.
+    testImplementation 'org.testcontainers:testcontainers-postgresql'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
 }

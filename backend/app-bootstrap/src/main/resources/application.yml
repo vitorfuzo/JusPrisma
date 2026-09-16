@@ -36,3 +36,7 @@ management:
 # MIN_AMOSTRA não aparece aqui de propósito: é constante de domínio
 # (br.com.jusprisma.dominio.estatistica.Amostra.MINIMO). Se fosse configurável,
 # bastaria baixá-la em produção para violar a regra inviolável 2 em silêncio.
+
+jusprisma:
+  jwt:
+    segredo: ${JUSPRISMA_JWT_SECRET}

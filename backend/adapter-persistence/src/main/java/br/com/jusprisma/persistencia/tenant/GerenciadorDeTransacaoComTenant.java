@@ -29,7 +29,7 @@ import java.util.UUID;
  * {@code app_tenant_atual()} devolve NULL, que faz as policies negarem tudo. É o
  * comportamento desejado: falha fechado.
  */
-public class GerenciadorDeTransacaoComTenant extends JpaTransactionManager {
+public final class GerenciadorDeTransacaoComTenant extends JpaTransactionManager {
 
     private static final String DEFINIR_TENANT = "SELECT set_config('app.tenant_id', ?, true)";
 

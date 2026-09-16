@@ -7,7 +7,6 @@ plugins {
 // Referenciar 'libs' dentro de subprojects{} dispara lookup implícito no projeto pai,
 // que o Gradle 10 transforma em erro.
 def versaoSpringBoot = libs.versions.springBoot.get()
-def versaoTestcontainers = libs.versions.testcontainers.get()
 
 subprojects {
     // java-library (e não apenas java) para que os módulos possam distinguir
@@ -31,7 +30,6 @@ subprojects {
     dependencyManagement {
         imports {
             mavenBom "org.springframework.boot:spring-boot-dependencies:${versaoSpringBoot}"
-            mavenBom "org.testcontainers:testcontainers-bom:${versaoTestcontainers}"
         }
     }
 
@@ -42,7 +40,9 @@ subprojects {
 
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
-        options.compilerArgs << '-Xlint:all' << '-parameters'
+        // -serial: excecoes de dominio nao sao serializadas; exigir serialVersionUID
+        // nelas so gera ruido que esconde aviso de verdade.
+        options.compilerArgs << '-Xlint:all,-serial' << '-parameters'
     }
 
     tasks.named('test') {
