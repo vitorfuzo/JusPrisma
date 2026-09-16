@@ -1,5 +1,6 @@
 package br.com.jusprisma.aplicacao.credito;
 
+import br.com.jusprisma.aplicacao.plano.LimitesVigentes;
 import br.com.jusprisma.aplicacao.porta.EscopoDeTenant;
 import br.com.jusprisma.dominio.credito.CreditoLancamento;
 import br.com.jusprisma.dominio.credito.TipoCredito;
@@ -23,10 +24,14 @@ public class Creditos {
 
     private final RepositorioDeCredito repositorio;
     private final EscopoDeTenant escopo;
+    private final LimitesVigentes limites;
 
-    public Creditos(RepositorioDeCredito repositorio, EscopoDeTenant escopo) {
+    public Creditos(RepositorioDeCredito repositorio,
+                    EscopoDeTenant escopo,
+                    LimitesVigentes limites) {
         this.repositorio = repositorio;
         this.escopo = escopo;
+        this.limites = limites;
     }
 
     public int saldo(UUID tenantId, TipoCredito tipo) {
@@ -53,15 +58,22 @@ public class Creditos {
      * uma. Com poucos créditos por plano, isso não é caso raro de laboratório: são dois
      * cliques no mesmo botão.
      *
+     * <p>Quando o plano trata o tipo como ilimitado, o lançamento é gravado do mesmo jeito
+     * mas o saldo não é exigido. Registrar o consumo ilimitado não é burocracia: é o que
+     * permite responder quanto um cliente de fair use realmente gasta, e é onde se descobre
+     * que "ilimitado" virou prejuízo antes de ele aparecer na fatura.
+     *
      * @throws SaldoInsuficienteException se o saldo não cobre a quantidade.
      */
     public CreditoLancamento debitar(UUID tenantId, TipoCredito tipo, int quantidade,
                                      String motivo, String referenciaId) {
+        boolean ilimitado = limites.de(tenantId).ilimitada(tipo.cota());
+
         return escopo.executarComo(tenantId, () -> {
             repositorio.travarParaAtualizacao(tenantId);
 
             int saldo = repositorio.saldo(tenantId, tipo);
-            if (saldo < quantidade) {
+            if (!ilimitado && saldo < quantidade) {
                 throw new SaldoInsuficienteException(tipo, saldo, quantidade);
             }
 

@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  /* Azul sóbrio: o público é advogado, e a interface precisa parecer instrumento de
+     trabalho, não aplicativo de consumo. */
+  --color-marca-50: #eef2ff;
+  --color-marca-100: #e0e7ff;
+  --color-marca-600: #3b4fd8;
+  --color-marca-700: #2f3eb0;
+  --color-marca-900: #1f2a6b;
+}
+
+html, body, #root {
+  min-height: 100dvh;
+}

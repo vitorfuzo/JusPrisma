@@ -1,6 +1,7 @@
 package br.com.jusprisma.aplicacao.conta;
 
 import br.com.jusprisma.aplicacao.porta.CodificadorDeSenha;
+import br.com.jusprisma.aplicacao.credito.RecargaDeCreditos;
 import br.com.jusprisma.aplicacao.plano.RepositorioDeAssinatura;
 import br.com.jusprisma.aplicacao.porta.EscopoDeTenant;
 import br.com.jusprisma.dominio.conta.Email;
@@ -26,17 +27,20 @@ public class CadastrarConta {
     private final EscopoDeTenant escopo;
     private final VerificacaoDeEmail verificacao;
     private final RepositorioDeAssinatura assinaturas;
+    private final RecargaDeCreditos recarga;
 
     public CadastrarConta(RepositorioDeConta repositorio,
                           CodificadorDeSenha codificador,
                           EscopoDeTenant escopo,
                           VerificacaoDeEmail verificacao,
-                          RepositorioDeAssinatura assinaturas) {
+                          RepositorioDeAssinatura assinaturas,
+                          RecargaDeCreditos recarga) {
         this.repositorio = repositorio;
         this.codificador = codificador;
         this.escopo = escopo;
         this.verificacao = verificacao;
         this.assinaturas = assinaturas;
+        this.recarga = recarga;
     }
 
     public record Comando(
@@ -73,6 +77,11 @@ public class CadastrarConta {
             assinaturas.registrar(Assinatura.iniciarTrial(
                     tenant.id(), PLANO_INICIAL, java.time.Instant.now().plus(DURACAO_DO_TRIAL)));
         });
+
+        // Abastece os creditos da degustacao. Sem isso a conta nasce com saldo zero e nao
+        // consegue gerar nem o primeiro perfil - foi exatamente o que o teste ponta a ponta
+        // revelou.
+        recarga.abastecer(tenant.id(), "início da degustação");
 
         // Depois do commit, e dentro do proprio caso de uso: cadastro sem e-mail de
         // verificacao e cadastro pela metade, e deixar o envio a cargo de quem chama faria

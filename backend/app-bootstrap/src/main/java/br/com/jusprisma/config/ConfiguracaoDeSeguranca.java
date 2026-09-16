@@ -69,6 +69,10 @@ public class ConfiguracaoDeSeguranca {
                         // ver de qual escritorio se trata antes de aceitar, e ainda nao tem
                         // conta para se autenticar.
                         .requestMatchers(HttpMethod.GET, "/api/v1/convites/pendente").permitAll()
+                        // O catalogo de planos e a tabela de precos: publico por natureza.
+                        // Exigir autenticacao impediria mostra-lo a quem ainda nao tem conta,
+                        // que e' justamente quem precisa ve-lo.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/planos").permitAll()
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated())

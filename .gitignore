@@ -30,3 +30,7 @@ Thumbs.db
 
 # Saídas locais de smoke test contra API real
 /tmp-smoke/
+
+# Frontend
+frontend/dist/
+frontend/node_modules/

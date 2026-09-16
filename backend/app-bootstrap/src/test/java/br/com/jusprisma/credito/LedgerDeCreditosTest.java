@@ -45,6 +45,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>A corrida não é cenário de laboratório. Com 2 créditos de perfil na degustação e 10 no
  * Solo, dois cliques no mesmo botão bastam para um usuário gastar duas vezes o que pagou
  * uma. É o tipo de falha que só aparece em produção e sempre em favor do cliente.
+ *
+ * <p>As asserções são relativas ao saldo inicial. A conta nasce com os créditos do plano,
+ * então fixar um número absoluto amarraria estes testes ao seed da Degustação e os
+ * quebraria a cada ajuste de tabela de preços — que é dado, e muda.
  */
 @SpringBootTest(classes = {JusPrismaApplication.class, CaixaDeSaidaDeTeste.Configuracao.class})
 @AutoConfigureMockMvc
@@ -95,11 +99,13 @@ class LedgerDeCreditosTest {
     void saldoEhSoma() throws Exception {
         UUID tenant = novoTenant();
 
+        int inicial = creditos.saldo(tenant, TipoCredito.PERFIL);
+
         creditos.creditar(tenant, TipoCredito.PERFIL, 10, "recarga do plano", null);
         creditos.debitar(tenant, TipoCredito.PERFIL, 3, "geração de perfil", "perfil-1");
         creditos.debitar(tenant, TipoCredito.PERFIL, 2, "geração de perfil", "perfil-2");
 
-        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isEqualTo(5);
+        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isEqualTo(inicial + 5);
     }
 
     @Test
@@ -107,25 +113,30 @@ class LedgerDeCreditosTest {
     void tiposSaoIndependentes() throws Exception {
         UUID tenant = novoTenant();
 
+        int perfilInicial = creditos.saldo(tenant, TipoCredito.PERFIL);
+        int iaInicial = creditos.saldo(tenant, TipoCredito.IA);
+
         creditos.creditar(tenant, TipoCredito.PERFIL, 5, "recarga", null);
         creditos.creditar(tenant, TipoCredito.IA, 100, "recarga", null);
         creditos.debitar(tenant, TipoCredito.IA, 40, "conversa", null);
 
-        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isEqualTo(5);
-        assertThat(creditos.saldo(tenant, TipoCredito.IA)).isEqualTo(60);
+        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isEqualTo(perfilInicial + 5);
+        assertThat(creditos.saldo(tenant, TipoCredito.IA)).isEqualTo(iaInicial + 60);
     }
 
     @Test
     @DisplayName("débito sem saldo é recusado e não deixa rastro")
     void debitoSemSaldoEhRecusado() throws Exception {
         UUID tenant = novoTenant();
-        creditos.creditar(tenant, TipoCredito.PERFIL, 1, "recarga", null);
+        // CONSULTA nasce em zero na Degustação, o que dá um ponto de partida limpo sem
+        // precisar gastar o saldo do plano antes.
+        creditos.creditar(tenant, TipoCredito.CONSULTA, 1, "recarga", null);
 
         assertThatThrownBy(() ->
-                creditos.debitar(tenant, TipoCredito.PERFIL, 2, "geração", null))
+                creditos.debitar(tenant, TipoCredito.CONSULTA, 2, "consulta", null))
                 .isInstanceOf(SaldoInsuficienteException.class);
 
-        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isEqualTo(1);
+        assertThat(creditos.saldo(tenant, TipoCredito.CONSULTA)).isEqualTo(1);
     }
 
     // -------------------------------------------------------------- concorrência
@@ -134,13 +145,16 @@ class LedgerDeCreditosTest {
     @DisplayName("com um crédito e dois débitos simultâneos, exatamente um passa")
     void debitoConcorrenteNaoGastaDuasVezes() throws Exception {
         UUID tenant = novoTenant();
-        creditos.creditar(tenant, TipoCredito.PERFIL, 1, "recarga", null);
+        // Um crédito exato, num tipo que nasce zerado: é o cenário mínimo em que a corrida
+        // aparece. Com saldo de sobra, os dois débitos passariam legitimamente e o teste
+        // não mediria nada.
+        creditos.creditar(tenant, TipoCredito.CONSULTA, 1, "recarga", null);
 
         CountDownLatch largada = new CountDownLatch(1);
         Callable<Boolean> tentarDebitar = () -> {
             largada.await();
             try {
-                creditos.debitar(tenant, TipoCredito.PERFIL, 1, "geração simultânea", null);
+                creditos.debitar(tenant, TipoCredito.CONSULTA, 1, "consulta simultânea", null);
                 return true;
             } catch (SaldoInsuficienteException esperado) {
                 return false;
@@ -159,7 +173,7 @@ class LedgerDeCreditosTest {
                     .isEqualTo(1);
         }
 
-        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isZero();
+        assertThat(creditos.saldo(tenant, TipoCredito.CONSULTA)).isZero();
     }
 
     // ------------------------------------------------------------------ estorno
@@ -168,16 +182,18 @@ class LedgerDeCreditosTest {
     @DisplayName("estorno devolve o crédito como lançamento novo")
     void estornoDevolveOCredito() throws Exception {
         UUID tenant = novoTenant();
+        int lancamentosIniciais = contarLancamentos(tenant);
+        int inicial = creditos.saldo(tenant, TipoCredito.PERFIL);
         creditos.creditar(tenant, TipoCredito.PERFIL, 5, "recarga", null);
 
         CreditoLancamento debito =
                 creditos.debitar(tenant, TipoCredito.PERFIL, 2, "geração", "perfil-x");
-        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isEqualTo(3);
+        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isEqualTo(inicial + 3);
 
         creditos.estornar(tenant, debito.id(), "falha na geração do perfil");
 
-        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isEqualTo(5);
-        assertThat(contarLancamentos(tenant))
+        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isEqualTo(inicial + 5);
+        assertThat(contarLancamentos(tenant) - lancamentosIniciais)
                 .as("o débito continua no extrato; o estorno é linha nova")
                 .isEqualTo(3);
     }
@@ -186,6 +202,7 @@ class LedgerDeCreditosTest {
     @DisplayName("o mesmo lançamento não é estornado duas vezes")
     void estornoDuploEhRecusado() throws Exception {
         UUID tenant = novoTenant();
+        int inicial = creditos.saldo(tenant, TipoCredito.PERFIL);
         creditos.creditar(tenant, TipoCredito.PERFIL, 5, "recarga", null);
         CreditoLancamento debito =
                 creditos.debitar(tenant, TipoCredito.PERFIL, 2, "geração", null);
@@ -196,7 +213,7 @@ class LedgerDeCreditosTest {
         assertThatThrownBy(() -> creditos.estornar(tenant, debito.id(), "falha de novo"))
                 .isInstanceOf(org.springframework.dao.DuplicateKeyException.class);
 
-        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isEqualTo(5);
+        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isEqualTo(inicial + 5);
     }
 
     // --------------------------------------------------------------- append-only
@@ -205,6 +222,7 @@ class LedgerDeCreditosTest {
     @DisplayName("o banco recusa UPDATE e DELETE no ledger")
     void ledgerEhAppendOnlyNoBanco() throws Exception {
         UUID tenant = novoTenant();
+        int inicial = creditos.saldo(tenant, TipoCredito.PERFIL);
         creditos.creditar(tenant, TipoCredito.PERFIL, 5, "recarga", null);
 
         // Conecta como dono do schema — que tem todos os privilégios — justamente para
@@ -222,7 +240,7 @@ class LedgerDeCreditosTest {
                     .hasMessageContaining("append-only");
         }
 
-        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isEqualTo(5);
+        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isEqualTo(inicial + 5);
     }
 
     @Test
