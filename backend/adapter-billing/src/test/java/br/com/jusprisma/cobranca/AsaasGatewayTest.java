@@ -1,6 +1,7 @@
 package br.com.jusprisma.cobranca;
 
 import br.com.jusprisma.aplicacao.cobranca.CobrancaRecusadaException;
+import br.com.jusprisma.aplicacao.cobranca.EventoDeCobranca;
 import br.com.jusprisma.aplicacao.cobranca.GatewayDePagamento.DadosDoCliente;
 import br.com.jusprisma.aplicacao.cobranca.GatewayDePagamento.NovaAssinatura;
 import br.com.jusprisma.aplicacao.cobranca.GatewayIndisponivelException;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -146,5 +148,32 @@ class AsaasGatewayTest {
         asaas.stubFor(get(urlPathEqualTo("/customers")).willReturn(aResponse().withStatus(401)));
         assertThatThrownBy(() -> gateway.garantirCliente(CLIENTE))
                 .isInstanceOf(GatewayIndisponivelException.class);
+    }
+
+    @Test
+    @DisplayName("pagamento confirmado leva a próxima cobrança a um ciclo depois do vencimento pago")
+    void proximaCobrancaUmCicloDepoisDoVencimento() {
+        // Corpo no formato documentado: o payment traz dueDate, e não nextDueDate.
+        var evento = gateway.interpretar("""
+                {"id": "evt_ficticio", "event": "PAYMENT_RECEIVED",
+                 "payment": {"object": "payment", "id": "pay_ficticio",
+                             "subscription": "sub_ficticia", "dueDate": "2026-10-16",
+                             "originalDueDate": "2026-10-16", "billingType": "PIX"}}
+                """).orElseThrow();
+
+        assertThat(evento.tipo()).isEqualTo(EventoDeCobranca.Tipo.PAGAMENTO_CONFIRMADO);
+        assertThat(evento.proximaCobranca()).isEqualTo(
+                LocalDate.of(2026, 11, 16).atStartOfDay(ZoneId.of("America/Sao_Paulo")).toInstant());
+    }
+
+    @Test
+    @DisplayName("evento sem vencimento não inventa próxima cobrança")
+    void semVencimentoSemProximaCobranca() {
+        var evento = gateway.interpretar("""
+                {"id": "evt_ficticio", "event": "SUBSCRIPTION_DELETED",
+                 "subscription": {"id": "sub_ficticia"}}
+                """).orElseThrow();
+
+        assertThat(evento.proximaCobranca()).isNull();
     }
 }

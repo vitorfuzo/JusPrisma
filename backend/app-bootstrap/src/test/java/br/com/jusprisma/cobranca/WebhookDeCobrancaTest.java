@@ -24,6 +24,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.Base64;
 import java.util.UUID;
 
@@ -163,6 +164,27 @@ class WebhookDeCobrancaTest {
     }
 
     @Test
+    @DisplayName("pagamento confirmado avança a próxima cobrança em um ciclo a partir do vencimento pago")
+    void pagamentoAvancaProximaCobranca() throws Exception {
+        UUID tenant = criarConta();
+        String assinatura = vincularAoGateway(tenant);
+
+        // Corpo no formato documentado pelo Asaas: o objeto payment traz o vencimento daquela
+        // cobrança (dueDate), e não o da próxima.
+        enviar("""
+                {"id": "evt_%s", "event": "PAYMENT_CONFIRMED",
+                 "payment": {"object": "payment", "id": "pay_ficticio",
+                             "subscription": "%s", "dueDate": "2026-10-16",
+                             "originalDueDate": "2026-10-16", "value": 137.00,
+                             "billingType": "PIX", "status": "CONFIRMED"}}
+                """.formatted(UUID.randomUUID(), assinatura))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.situacao").value("processado"));
+
+        assertThat(proximaCobranca(tenant)).isEqualTo(LocalDate.of(2026, 11, 16));
+    }
+
+    @Test
     @DisplayName("pagamento vencido marca inadimplente, sem cortar o acesso")
     void pagamentoVencidoNaoCortaAcesso() throws Exception {
         UUID tenant = criarConta();
@@ -230,7 +252,7 @@ class WebhookDeCobrancaTest {
     private static String corpoDePagamento(String idDoEvento, String assinatura) {
         return """
                 {"id": "%s", "event": "PAYMENT_CONFIRMED",
-                 "payment": {"subscription": "%s", "nextDueDate": "2026-12-01"}}
+                 "payment": {"subscription": "%s", "dueDate": "2026-11-01"}}
                 """.formatted(idDoEvento, assinatura);
     }
 
@@ -271,6 +293,20 @@ class WebhookDeCobrancaTest {
             try (var rs = ps.executeQuery()) {
                 rs.next();
                 return rs.getString(1);
+            }
+        }
+    }
+
+    private LocalDate proximaCobranca(UUID tenant) throws SQLException {
+        try (Connection dono = conexaoDono();
+             PreparedStatement ps = dono.prepareStatement("""
+                     SELECT (proxima_cobranca AT TIME ZONE 'America/Sao_Paulo')::date
+                       FROM assinatura WHERE tenant_id = ?
+                     """)) {
+            ps.setObject(1, tenant);
+            try (var rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getObject(1, LocalDate.class);
             }
         }
     }

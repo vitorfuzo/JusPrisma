@@ -163,7 +163,7 @@ class ContratacaoDePlanoTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"id": "evt_%s", "event": "PAYMENT_CONFIRMED",
-                                 "payment": {"subscription": "%s", "nextDueDate": "2026-12-01"}}
+                                 "payment": {"subscription": "%s", "dueDate": "2026-11-01"}}
                                 """.formatted(UUID.randomUUID(), assinaturaNoGateway)))
                 .andExpect(status().isOk());
 
