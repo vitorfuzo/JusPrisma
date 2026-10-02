@@ -15,6 +15,10 @@ import java.util.UUID;
 @Repository
 public class RepositorioDeAssinaturaJdbc implements RepositorioDeAssinatura {
 
+    private static final String COLUNAS = """
+            id, tenant_id, plano_codigo, status, inicio_em, fim_do_periodo, proxima_cobranca,
+            gateway_customer_id, gateway_subscription_id, plano_contratado""";
+
     private final JdbcClient jdbc;
 
     public RepositorioDeAssinaturaJdbc(JdbcClient jdbc) {
@@ -47,15 +51,50 @@ public class RepositorioDeAssinaturaJdbc implements RepositorioDeAssinatura {
         // O índice parcial único garante no máximo uma vigente por tenant, então não há
         // ambiguidade de qual devolver.
         return jdbc.sql("""
-                SELECT id, tenant_id, plano_codigo, status, inicio_em, fim_do_periodo,
-                       proxima_cobranca, gateway_customer_id, gateway_subscription_id
+                SELECT %s
                   FROM assinatura
                  WHERE tenant_id = :tenantId
                    AND status IN ('TRIAL', 'ATIVA', 'INADIMPLENTE')
-                """)
+                """.formatted(COLUNAS))
                 .param("tenantId", tenantId)
                 .query(RepositorioDeAssinaturaJdbc::mapear)
                 .optional();
+    }
+
+    @Override
+    public Optional<Assinatura> travarVigenteDoTenant(UUID tenantId) {
+        // FOR UPDATE serializa duas contratacoes simultaneas do mesmo escritorio: a segunda
+        // espera a primeira terminar e ja encontra a assinatura registrada no gateway.
+        return jdbc.sql("""
+                SELECT %s
+                  FROM assinatura
+                 WHERE tenant_id = :tenantId
+                   AND status IN ('TRIAL', 'ATIVA', 'INADIMPLENTE')
+                   FOR UPDATE
+                """.formatted(COLUNAS))
+                .param("tenantId", tenantId)
+                .query(RepositorioDeAssinaturaJdbc::mapear)
+                .optional();
+    }
+
+    @Override
+    public void registrarContratacao(UUID assinaturaId, String clienteNoGateway,
+                                     String assinaturaNoGateway, String planoContratado,
+                                     Instant proximaCobranca) {
+        jdbc.sql("""
+                UPDATE assinatura
+                   SET gateway_customer_id = :cliente,
+                       gateway_subscription_id = :assinatura,
+                       plano_contratado = :plano,
+                       proxima_cobranca = coalesce(:proxima, proxima_cobranca)
+                 WHERE id = :id
+                """)
+                .param("cliente", clienteNoGateway)
+                .param("assinatura", assinaturaNoGateway)
+                .param("plano", planoContratado)
+                .param("proxima", timestamp(proximaCobranca))
+                .param("id", assinaturaId)
+                .update();
     }
 
     @Override
@@ -76,7 +115,8 @@ public class RepositorioDeAssinaturaJdbc implements RepositorioDeAssinatura {
                 instante(rs, "fim_do_periodo"),
                 instante(rs, "proxima_cobranca"),
                 rs.getString("gateway_customer_id"),
-                rs.getString("gateway_subscription_id"));
+                rs.getString("gateway_subscription_id"),
+                rs.getString("plano_contratado"));
     }
 
     private static Timestamp timestamp(Instant instante) {

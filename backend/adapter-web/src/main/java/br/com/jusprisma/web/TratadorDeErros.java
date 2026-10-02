@@ -1,5 +1,8 @@
 package br.com.jusprisma.web;
 
+import br.com.jusprisma.aplicacao.cobranca.AssinaturaJaContratadaException;
+import br.com.jusprisma.aplicacao.cobranca.CobrancaRecusadaException;
+import br.com.jusprisma.aplicacao.cobranca.GatewayIndisponivelException;
 import br.com.jusprisma.aplicacao.conta.ContaIndisponivelException;
 import br.com.jusprisma.aplicacao.conta.CredenciaisInvalidasException;
 import br.com.jusprisma.aplicacao.conta.EmailJaCadastradoException;
@@ -118,6 +121,26 @@ public class TratadorDeErros {
     @ExceptionHandler(SenhaFracaException.class)
     public ProblemDetail senhaFraca(SenhaFracaException e) {
         return problema(HttpStatus.UNPROCESSABLE_CONTENT, "Senha fraca", e.getMessage());
+    }
+
+    @ExceptionHandler(AssinaturaJaContratadaException.class)
+    public ProblemDetail assinaturaJaContratada(AssinaturaJaContratadaException e) {
+        return problema(HttpStatus.CONFLICT, "Plano já contratado", e.getMessage());
+    }
+
+    @ExceptionHandler(CobrancaRecusadaException.class)
+    public ProblemDetail cobrancaRecusada(CobrancaRecusadaException e) {
+        // A mensagem é a do gateway, e o advogado consegue agir sobre ela (documento
+        // recusado, e-mail inválido). Não é falha nossa, por isso não é 5xx.
+        return problema(HttpStatus.UNPROCESSABLE_CONTENT, "Cobrança recusada", e.getMessage());
+    }
+
+    @ExceptionHandler(GatewayIndisponivelException.class)
+    public ProblemDetail gatewayIndisponivel(GatewayIndisponivelException e) {
+        log.warn("gateway de cobrança indisponível: {}", e.getMessage(), e);
+        return problema(HttpStatus.SERVICE_UNAVAILABLE, "Cobrança indisponível",
+                "Não foi possível falar com o serviço de cobrança. Nada foi cobrado; tente "
+                        + "novamente em alguns minutos.");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

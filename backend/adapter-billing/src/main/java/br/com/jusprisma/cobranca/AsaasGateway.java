@@ -1,7 +1,10 @@
 package br.com.jusprisma.cobranca;
 
+import br.com.jusprisma.aplicacao.cobranca.CobrancaRecusadaException;
 import br.com.jusprisma.aplicacao.cobranca.EventoDeCobranca;
 import br.com.jusprisma.aplicacao.cobranca.GatewayDePagamento;
+import br.com.jusprisma.aplicacao.cobranca.GatewayIndisponivelException;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import org.slf4j.Logger;
@@ -9,6 +12,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -17,8 +22,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * Adaptador do Asaas.
@@ -37,6 +45,7 @@ public class AsaasGateway implements GatewayDePagamento {
     private static final Logger log = LoggerFactory.getLogger(AsaasGateway.class);
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String NOME = "asaas";
+    private static final Duration TEMPO_LIMITE = Duration.ofSeconds(20);
 
     private final WebClient cliente;
     private final String tokenDoWebhook;
@@ -60,48 +69,100 @@ public class AsaasGateway implements GatewayDePagamento {
 
     @Override
     @Retry(name = "asaas")
-    @CircuitBreaker(name = "asaas")
-    public ClienteNoGateway criarCliente(DadosDoCliente dados) {
-        JsonNode resposta = cliente.post()
-                .uri("/customers")
-                .bodyValue(Map.of(
-                        "name", dados.nome(),
-                        "email", dados.email(),
-                        "cpfCnpj", dados.cnpj() == null ? "" : dados.cnpj()))
+    @CircuitBreaker(name = "asaas", fallbackMethod = "clienteIndisponivel")
+    public ClienteNoGateway garantirCliente(DadosDoCliente dados) {
+        // A referência externa é o tenant. Buscar antes de criar é o que torna a chamada
+        // repetível: o retry acima, ou uma nova tentativa do advogado, encontra o cliente
+        // criado por uma tentativa que falhou depois.
+        JsonNode existente = primeiro(chamar(() -> cliente.get()
+                .uri(uri -> uri.path("/customers")
+                        .queryParam("externalReference", dados.referenciaExterna())
+                        .build())
                 .retrieve()
                 .bodyToMono(JsonNode.class)
-                .block(Duration.ofSeconds(20));
+                .block(TEMPO_LIMITE)));
 
-        return new ClienteNoGateway(exigir(resposta, "id"));
+        Map<String, Object> corpo = Map.of(
+                "name", dados.nome(),
+                "email", dados.email(),
+                "cpfCnpj", dados.documento(),
+                "externalReference", dados.referenciaExterna(),
+                // Sem isto o Asaas manda e-mail e SMS próprios de cobrança, duplicando os
+                // nossos avisos com outra marca.
+                "notificationDisabled", true);
+
+        if (existente != null) {
+            String id = exigir(existente, "id");
+            // Atualiza sempre: o documento pode ter sido corrigido entre uma tentativa e outra.
+            chamar(() -> cliente.put()
+                    .uri("/customers/{id}", id)
+                    .bodyValue(corpo)
+                    .retrieve()
+                    .bodyToMono(JsonNode.class)
+                    .block(TEMPO_LIMITE));
+            return new ClienteNoGateway(id);
+        }
+
+        JsonNode criado = chamar(() -> cliente.post()
+                .uri("/customers")
+                .bodyValue(corpo)
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .block(TEMPO_LIMITE));
+        return new ClienteNoGateway(exigir(criado, "id"));
     }
 
     @Override
     @Retry(name = "asaas")
-    @CircuitBreaker(name = "asaas")
-    public AssinaturaNoGateway assinar(String clienteNoGateway, String planoCodigo, int valorCentavos) {
+    @CircuitBreaker(name = "asaas", fallbackMethod = "assinaturaIndisponivel")
+    public AssinaturaNoGateway garantirAssinatura(NovaAssinatura dados) {
+        // Uma assinatura ativa com esta referência já existe quando o gateway criou e o nosso
+        // commit falhou. Criar de novo seria cobrar o escritório duas vezes por mês.
+        JsonNode existente = primeiro(chamar(() -> cliente.get()
+                .uri(uri -> uri.path("/subscriptions")
+                        .queryParam("externalReference", dados.referenciaExterna())
+                        .queryParam("status", "ACTIVE")
+                        .build())
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .block(TEMPO_LIMITE)));
+        if (existente != null) {
+            return new AssinaturaNoGateway(exigir(existente, "id"));
+        }
+
         // O Asaas trabalha com valor em reais decimais, não em centavos. A conversão fica
         // aqui, na borda: o domínio inteiro raciocina em centavos, porque valor monetário
         // em ponto flutuante acumula erro e vira divergência de fatura.
-        String valor = new java.math.BigDecimal(valorCentavos)
+        String valor = new java.math.BigDecimal(dados.valorCentavos())
                 .movePointLeft(2).toPlainString();
 
-        JsonNode resposta = cliente.post()
+        JsonNode criada = chamar(() -> cliente.post()
                 .uri("/subscriptions")
                 .bodyValue(Map.of(
-                        "customer", clienteNoGateway,
+                        "customer", dados.clienteNoGateway(),
                         "billingType", "UNDEFINED",
                         "value", valor,
-                        "nextDueDate", LocalDate.now().plusDays(1).toString(),
+                        "nextDueDate", dados.primeiraCobranca().toString(),
                         "cycle", "MONTHLY",
-                        "description", "JusPrisma " + planoCodigo,
-                        "externalReference", planoCodigo))
+                        "description", "JusPrisma " + dados.planoCodigo(),
+                        "externalReference", dados.referenciaExterna()))
                 .retrieve()
                 .bodyToMono(JsonNode.class)
-                .block(Duration.ofSeconds(20));
+                .block(TEMPO_LIMITE));
 
-        return new AssinaturaNoGateway(
-                exigir(resposta, "id"),
-                proximaCobranca(resposta));
+        return new AssinaturaNoGateway(exigir(criada, "id"));
+    }
+
+    // Circuito aberto: a chamada nem saiu. O tipo da exceção restringe o fallback a este
+    // caso; as demais seguem como foram lançadas.
+    @SuppressWarnings("unused")
+    private ClienteNoGateway clienteIndisponivel(DadosDoCliente dados, CallNotPermittedException e) {
+        throw new GatewayIndisponivelException("gateway de cobrança em pausa após falhas seguidas", e);
+    }
+
+    @SuppressWarnings("unused")
+    private AssinaturaNoGateway assinaturaIndisponivel(NovaAssinatura dados, CallNotPermittedException e) {
+        throw new GatewayIndisponivelException("gateway de cobrança em pausa após falhas seguidas", e);
     }
 
     @Override
@@ -112,7 +173,7 @@ public class AsaasGateway implements GatewayDePagamento {
                 .uri("/subscriptions/{id}", assinaturaNoGateway)
                 .retrieve()
                 .bodyToMono(Void.class)
-                .block(Duration.ofSeconds(20));
+                .block(TEMPO_LIMITE);
     }
 
     @Override
@@ -179,10 +240,6 @@ public class AsaasGateway implements GatewayDePagamento {
         };
     }
 
-    private static Instant proximaCobranca(JsonNode resposta) {
-        return proximoVencimento(resposta);
-    }
-
     private static Instant proximoVencimento(JsonNode no) {
         String data = no.path("nextDueDate").asString();
         if (data == null || data.isBlank()) {
@@ -195,6 +252,57 @@ public class AsaasGateway implements GatewayDePagamento {
         } catch (RuntimeException e) {
             return null;
         }
+    }
+
+    /**
+     * Traduz falha de transporte para o vocabulário da porta.
+     *
+     * <p>4xx é o Asaas recusando os dados — a descrição dele vai ao advogado, que pode
+     * corrigir. 401 e 403 são exceção: chave nossa errada não é algo que o cliente conserte.
+     * O resto (5xx, timeout, rede) é indisponibilidade e passa pelo retry.
+     */
+    private static JsonNode chamar(Supplier<JsonNode> chamada) {
+        try {
+            return chamada.get();
+        } catch (WebClientResponseException e) {
+            int status = e.getStatusCode().value();
+            if (status == 401 || status == 403) {
+                log.error("Asaas recusou a credencial ({}); verifique a chave configurada", status);
+                throw new CredencialRecusadaPeloAsaasException(e);
+            }
+            if (e.getStatusCode().is4xxClientError()) {
+                throw new CobrancaRecusadaException(descricaoDoErro(e.getResponseBodyAsString()));
+            }
+            throw new GatewayIndisponivelException("gateway respondeu " + status, e);
+        } catch (WebClientRequestException e) {
+            throw new GatewayIndisponivelException("gateway inacessível", e);
+        } catch (IllegalStateException e) {
+            // block(Duration) sinaliza o tempo esgotado com IllegalStateException.
+            throw new GatewayIndisponivelException("gateway não respondeu a tempo", e);
+        }
+    }
+
+    private static String descricaoDoErro(String corpo) {
+        try {
+            List<String> descricoes = new ArrayList<>();
+            for (JsonNode erro : JSON.readTree(corpo).path("errors")) {
+                String descricao = erro.path("description").asString();
+                if (descricao != null && !descricao.isBlank()) {
+                    descricoes.add(descricao);
+                }
+            }
+            if (!descricoes.isEmpty()) {
+                return String.join(" ", descricoes);
+            }
+        } catch (RuntimeException ignorado) {
+            // Corpo fora do formato documentado; cai na mensagem genérica.
+        }
+        return "o gateway de cobrança recusou os dados informados";
+    }
+
+    private static JsonNode primeiro(JsonNode lista) {
+        JsonNode dados = lista == null ? null : lista.path("data");
+        return dados != null && dados.isArray() && !dados.isEmpty() ? dados.get(0) : null;
     }
 
     private static String exigir(JsonNode resposta, String campo) {

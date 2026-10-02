@@ -141,4 +141,18 @@ public class RepositorioDeEventoDeCobrancaJdbc implements RepositorioDeEventoDeC
                 .query(String.class)
                 .optional();
     }
+
+    @Override
+    @Transactional
+    public Optional<String> efetivarPlanoContratado(UUID assinaturaId) {
+        // A função devolve nulo quando não havia pendência — a renovação mensal comum. O
+        // mapeador de coluna única do JdbcClient recusa nulo, por isso a leitura é manual.
+        return jdbc.sql("SELECT cobranca_efetivar_plano_contratado(:id)")
+                .param("id", assinaturaId)
+                .query((rs, linha) -> rs.getString(1))
+                .list()
+                .stream()
+                .filter(java.util.Objects::nonNull)
+                .findFirst();
+    }
 }
