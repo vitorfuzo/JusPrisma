@@ -138,18 +138,61 @@ class WebhookDeCobrancaTest {
     }
 
     @Test
-    @DisplayName("eventos distintos do mesmo pagamento são processados separadamente")
+    @DisplayName("pagamentos distintos da mesma assinatura são duas recargas")
     void eventosDistintosNaoSaoConfundidos() throws Exception {
         UUID tenant = criarConta();
         String assinatura = vincularAoGateway(tenant);
         int antes = creditos.saldo(tenant, TipoCredito.PERFIL);
 
-        notificar("evt_" + UUID.randomUUID(), assinatura).andExpect(status().isOk());
-        notificar("evt_" + UUID.randomUUID(), assinatura).andExpect(status().isOk());
+        notificar("evt_" + UUID.randomUUID(), assinatura, "pay_" + UUID.randomUUID())
+                .andExpect(status().isOk());
+        notificar("evt_" + UUID.randomUUID(), assinatura, "pay_" + UUID.randomUUID())
+                .andExpect(status().isOk());
 
         assertThat(creditos.saldo(tenant, TipoCredito.PERFIL) - antes)
-                .as("dois pagamentos são duas recargas — a idempotência é por evento, não por assinatura")
+                .as("dois pagamentos são duas recargas — a idempotência é por pagamento, não por assinatura")
                 .isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("confirmação e recebimento do mesmo pagamento no cartão creditam uma vez")
+    void confirmacaoERecebimentoDoMesmoPagamentoCreditamUmaVez() throws Exception {
+        // No cartão o Asaas notifica PAYMENT_CONFIRMED na aprovação e PAYMENT_RECEIVED na
+        // liquidação, ~32 dias depois: dois eventos, ids diferentes, um pagamento só.
+        UUID tenant = criarConta();
+        String assinatura = vincularAoGateway(tenant);
+        int antes = creditos.saldo(tenant, TipoCredito.PERFIL);
+        String pagamento = "pay_" + UUID.randomUUID();
+
+        enviar(corpoDePagamento("evt_" + UUID.randomUUID(), "PAYMENT_CONFIRMED", assinatura, pagamento))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.situacao").value("processado"));
+        enviar(corpoDePagamento("evt_" + UUID.randomUUID(), "PAYMENT_RECEIVED", assinatura, pagamento))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.situacao").value("repetido"));
+
+        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL) - antes)
+                .as("o mesmo pagamento recarrega uma única vez, qualquer que seja o evento")
+                .isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("pagamento confirmado sem identificador de pagamento não credita")
+    void pagamentoSemIdentificadorNaoCredita() throws Exception {
+        // Sem o pagamento não há como saber se o outro evento dele já creditou. Fica
+        // registrado para tratamento manual, em vez de arriscar crédito em dobro.
+        UUID tenant = criarConta();
+        String assinatura = vincularAoGateway(tenant);
+        int antes = creditos.saldo(tenant, TipoCredito.PERFIL);
+
+        enviar("""
+                {"id": "evt_%s", "event": "PAYMENT_CONFIRMED",
+                 "payment": {"subscription": "%s", "dueDate": "2026-11-01"}}
+                """.formatted(UUID.randomUUID(), assinatura))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.situacao").value("ignorado"));
+
+        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isEqualTo(antes);
     }
 
     // ------------------------------------------------------------------ efeito
@@ -262,7 +305,12 @@ class WebhookDeCobrancaTest {
 
     private org.springframework.test.web.servlet.ResultActions notificar(
             String idDoEvento, String assinatura) throws Exception {
-        return enviar(corpoDePagamento(idDoEvento, assinatura));
+        return notificar(idDoEvento, assinatura, "pay_" + UUID.randomUUID());
+    }
+
+    private org.springframework.test.web.servlet.ResultActions notificar(
+            String idDoEvento, String assinatura, String pagamento) throws Exception {
+        return enviar(corpoDePagamento(idDoEvento, "PAYMENT_CONFIRMED", assinatura, pagamento));
     }
 
     private org.springframework.test.web.servlet.ResultActions enviar(String corpo)
@@ -274,10 +322,15 @@ class WebhookDeCobrancaTest {
     }
 
     private static String corpoDePagamento(String idDoEvento, String assinatura) {
+        return corpoDePagamento(idDoEvento, "PAYMENT_CONFIRMED", assinatura, "pay_" + UUID.randomUUID());
+    }
+
+    private static String corpoDePagamento(String idDoEvento, String evento,
+                                           String assinatura, String pagamento) {
         return """
-                {"id": "%s", "event": "PAYMENT_CONFIRMED",
-                 "payment": {"subscription": "%s", "dueDate": "2026-11-01"}}
-                """.formatted(idDoEvento, assinatura);
+                {"id": "%s", "event": "%s",
+                 "payment": {"id": "%s", "subscription": "%s", "dueDate": "2026-11-01"}}
+                """.formatted(idDoEvento, evento, pagamento, assinatura);
     }
 
     private UUID criarConta() throws Exception {

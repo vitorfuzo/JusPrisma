@@ -48,6 +48,24 @@ public class RepositorioDeEventoDeCobrancaJdbc implements RepositorioDeEventoDeC
 
     @Override
     @Transactional
+    public boolean registrarPagamentoSeNovo(String gateway, String pagamentoNoGateway, String idDoEvento) {
+        try {
+            jdbc.sql("""
+                    INSERT INTO pagamento_efetivado (gateway, pagamento_id_externo, evento_id_externo)
+                    VALUES (:gateway, :pagamento, :idDoEvento)
+                    """)
+                    .param("gateway", gateway)
+                    .param("pagamento", pagamentoNoGateway)
+                    .param("idDoEvento", idDoEvento)
+                    .update();
+            return true;
+        } catch (DuplicateKeyException outroEventoDoMesmoPagamento) {
+            return false;
+        }
+    }
+
+    @Override
+    @Transactional
     public void marcarProcessado(String gateway, String idExterno) {
         jdbc.sql("""
                 UPDATE evento_gateway SET processado_em = now(), erro = NULL

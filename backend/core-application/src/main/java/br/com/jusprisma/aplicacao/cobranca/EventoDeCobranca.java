@@ -13,6 +13,11 @@ public record EventoDeCobranca(
         String idExterno,
         Tipo tipo,
         String assinaturaNoGateway,
+        /**
+         * O pagamento a que o evento se refere. Um pagamento gera mais de um evento — no
+         * cartão, aprovação e liquidação —, e é por ele que o efeito se aplica uma vez só.
+         */
+        String pagamentoNoGateway,
         Instant proximaCobranca,
         String corpoOriginal) {
 
