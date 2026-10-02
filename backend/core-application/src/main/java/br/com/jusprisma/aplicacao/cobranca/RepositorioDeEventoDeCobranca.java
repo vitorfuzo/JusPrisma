@@ -18,6 +18,15 @@ public interface RepositorioDeEventoDeCobranca {
      */
     boolean registrarSeNovo(String gateway, EventoDeCobranca evento);
 
+    /**
+     * Reserva o efeito de um pagamento para este evento.
+     *
+     * @return false se outro evento do mesmo pagamento já o aplicou — a confirmação e o
+     *         recebimento do mesmo cartão, por exemplo. Decidido pela unicidade no banco,
+     *         como em {@link #registrarSeNovo}.
+     */
+    boolean registrarPagamentoSeNovo(String gateway, String pagamentoNoGateway, String idDoEvento);
+
     void marcarProcessado(String gateway, String idExterno);
 
     void marcarErro(String gateway, String idExterno, String erro);

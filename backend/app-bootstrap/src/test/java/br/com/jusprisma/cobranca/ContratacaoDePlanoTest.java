@@ -163,8 +163,9 @@ class ContratacaoDePlanoTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"id": "evt_%s", "event": "PAYMENT_CONFIRMED",
-                                 "payment": {"subscription": "%s", "nextDueDate": "2026-12-01"}}
-                                """.formatted(UUID.randomUUID(), assinaturaNoGateway)))
+                                 "payment": {"id": "pay_%s", "subscription": "%s",
+                                             "nextDueDate": "2026-12-01"}}
+                                """.formatted(UUID.randomUUID(), UUID.randomUUID(), assinaturaNoGateway)))
                 .andExpect(status().isOk());
 
         assertThat(coluna("SELECT plano_codigo FROM assinatura WHERE tenant_id = ?", conta.tenantId()))
