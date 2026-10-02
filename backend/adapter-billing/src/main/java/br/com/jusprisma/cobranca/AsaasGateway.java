@@ -127,7 +127,7 @@ public class AsaasGateway implements GatewayDePagamento {
                 .bodyToMono(JsonNode.class)
                 .block(TEMPO_LIMITE)));
         if (existente != null) {
-            return new AssinaturaNoGateway(exigir(existente, "id"), proximoVencimento(existente));
+            return new AssinaturaNoGateway(exigir(existente, "id"));
         }
 
         // O Asaas trabalha com valor em reais decimais, não em centavos. A conversão fica
@@ -150,7 +150,7 @@ public class AsaasGateway implements GatewayDePagamento {
                 .bodyToMono(JsonNode.class)
                 .block(TEMPO_LIMITE));
 
-        return new AssinaturaNoGateway(exigir(criada, "id"), proximoVencimento(criada));
+        return new AssinaturaNoGateway(exigir(criada, "id"));
     }
 
     // Circuito aberto: a chamada nem saiu. O tipo da exceção restringe o fallback a este

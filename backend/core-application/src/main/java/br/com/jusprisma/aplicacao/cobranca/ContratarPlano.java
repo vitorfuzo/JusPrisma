@@ -93,8 +93,11 @@ public class ContratarPlano {
                             assinatura.id().toString(), cliente.id(), plano.codigo(),
                             plano.precoCentavos(), primeiraCobranca));
 
+            // A data gravada é a que nós pedimos. O Asaas gera a primeira fatura ao criar a
+            // assinatura e devolve nextDueDate já no ciclo seguinte — gravar aquilo mostraria
+            // ao advogado uma cobrança um mês depois da real.
             assinaturas.registrarContratacao(assinatura.id(), cliente.id(), criada.id(),
-                    plano.codigo(), criada.proximaCobranca());
+                    plano.codigo(), primeiraCobranca.atStartOfDay(FUSO).toInstant());
 
             log.info("plano {} contratado para a assinatura {}; primeira cobrança em {}",
                     plano.codigo(), assinatura.id(), primeiraCobranca);

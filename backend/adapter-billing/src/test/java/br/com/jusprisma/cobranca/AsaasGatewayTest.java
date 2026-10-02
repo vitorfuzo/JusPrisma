@@ -101,7 +101,6 @@ class AsaasGatewayTest {
                 "assinatura-ficticia", "cus_novo", "SOLO", 13700, LocalDate.of(2026, 10, 15)));
 
         assertThat(criada.id()).isEqualTo("sub_nova");
-        assertThat(criada.proximaCobranca()).isNotNull();
         asaas.verify(postRequestedFor(urlPathEqualTo("/subscriptions"))
                 .withRequestBody(equalToJson("""
                         {"customer": "cus_novo", "value": "137.00", "nextDueDate": "2026-10-15",

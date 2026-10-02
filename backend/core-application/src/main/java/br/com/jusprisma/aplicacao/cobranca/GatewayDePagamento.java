@@ -1,6 +1,5 @@
 package br.com.jusprisma.aplicacao.cobranca;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
 
@@ -73,6 +72,6 @@ public interface GatewayDePagamento {
             LocalDate primeiraCobranca) {
     }
 
-    record AssinaturaNoGateway(String id, Instant proximaCobranca) {
+    record AssinaturaNoGateway(String id) {
     }
 }

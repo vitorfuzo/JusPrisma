@@ -140,7 +140,9 @@ class ContratacaoDePlanoTest {
         mockMvc.perform(get("/api/v1/assinatura").header("Authorization", "Bearer " + conta.acesso()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.contratacao.contratado").value(true))
-                .andExpect(jsonPath("$.contratacao.planoPendente").value("SOLO"));
+                .andExpect(jsonPath("$.contratacao.planoPendente").value("SOLO"))
+                .andExpect(jsonPath("$.contratacao.proximaCobranca")
+                        .value(fimDaDegustacao.toString()));
         assertThat(coluna("SELECT plano_contratado FROM assinatura WHERE tenant_id = ?", conta.tenantId()))
                 .isEqualTo("SOLO");
         assertThat(coluna("SELECT plano_codigo FROM assinatura WHERE tenant_id = ?", conta.tenantId()))
@@ -395,8 +397,7 @@ class ContratacaoDePlanoTest {
                 throw new GatewayIndisponivelException("falha simulada", null);
             }
             assinaturas.add(dados);
-            return new AssinaturaNoGateway("sub_" + UUID.randomUUID(),
-                    dados.primeiraCobranca().atStartOfDay(FUSO).toInstant());
+            return new AssinaturaNoGateway("sub_" + UUID.randomUUID());
         }
 
         @Override
