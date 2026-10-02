@@ -16,7 +16,9 @@ public record Assinatura(
         Instant proximaCobranca,
         String gatewayCustomerId,
         String gatewaySubscriptionId,
-        String planoContratado) {
+        String planoContratado,
+        /** Fim do acesso de uma assinatura cancelada com período já pago; nulo se não há. */
+        Instant cancelaEm) {
 
     public enum Status {
         /** Degustação paga, converte automaticamente ao fim do período. */
@@ -39,22 +41,27 @@ public record Assinatura(
     public static Assinatura iniciarTrial(UUID tenantId, String planoCodigo, Instant fimDoTrial) {
         return new Assinatura(
                 UUID.randomUUID(), tenantId, planoCodigo, Status.TRIAL,
-                Instant.now(), fimDoTrial, fimDoTrial, null, null, null);
+                Instant.now(), fimDoTrial, fimDoTrial, null, null, null, null);
     }
 
-    /**
-     * Se a assinatura dá direito de uso agora.
-     *
-     * <p>Inadimplente continua valendo de propósito: cortar o acesso no primeiro boleto
-     * atrasado perde cliente que só trocou de cartão. O corte acontece quando a assinatura
-     * é efetivamente cancelada.
-     */
     /** Já existe assinatura criada no gateway: contratar de novo cobraria em dobro. */
     public boolean contratadaNoGateway() {
         return gatewaySubscriptionId != null;
     }
 
-    public boolean vigente() {
-        return status == Status.TRIAL || status == Status.ATIVA || status == Status.INADIMPLENTE;
+    /**
+     * Se a assinatura dá direito de uso no instante informado.
+     *
+     * <p>Inadimplente continua valendo de propósito: cortar o acesso no primeiro boleto
+     * atrasado perde cliente que só trocou de cartão. O corte acontece quando a assinatura
+     * é efetivamente cancelada.
+     *
+     * <p>Cancelada com período pago vale até {@code cancelaEm}, e deixa de valer nesse
+     * instante sem esperar o job que muda o status.
+     */
+    public boolean vigente(Instant agora) {
+        boolean statusVigente = status == Status.TRIAL || status == Status.ATIVA
+                || status == Status.INADIMPLENTE;
+        return statusVigente && (cancelaEm == null || agora.isBefore(cancelaEm));
     }
 }

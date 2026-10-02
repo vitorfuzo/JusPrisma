@@ -41,12 +41,15 @@ public class CicloDeCobrancaJob {
         }
 
         try {
+            // Antes da conversão: degustação cancelada que venceu vira CANCELADA, e não
+            // inadimplente com acesso.
+            int encerradas = ciclo.encerrarCancelamentosVencidos();
             int avisados = ciclo.avisarQuemEstaPertoDoFim();
             int convertidas = ciclo.converterVencidas();
 
-            if (avisados > 0 || convertidas > 0) {
-                log.info("ciclo de cobrança: {} avisos enviados, {} degustações encerradas",
-                        avisados, convertidas);
+            if (encerradas > 0 || avisados > 0 || convertidas > 0) {
+                log.info("ciclo de cobrança: {} cancelamentos encerrados, {} avisos enviados, "
+                        + "{} degustações encerradas", encerradas, avisados, convertidas);
             }
         } catch (RuntimeException e) {
             // Falha aqui não pode derrubar o agendador: se a exceção escapar, o Spring

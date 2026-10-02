@@ -110,14 +110,19 @@ public class ContratarPlano {
      *
      * @param planoPendente plano escolhido aguardando o primeiro pagamento, ou nulo.
      */
-    public record Situacao(boolean contratado, String planoPendente, LocalDate proximaCobranca) {
+    public record Situacao(boolean contratado, String planoPendente, LocalDate proximaCobranca,
+                           LocalDate acessoAte) {
     }
 
     public Situacao situacao(UUID tenantId) {
         return escopo.executarComo(tenantId, () -> assinaturas.vigenteDoTenant(tenantId)
                 .map(a -> new Situacao(a.contratadaNoGateway(), a.planoContratado(),
-                        a.proximaCobranca() == null ? null : a.proximaCobranca().atZone(FUSO).toLocalDate()))
-                .orElse(new Situacao(false, null, null)));
+                        data(a.proximaCobranca()), data(a.cancelaEm())))
+                .orElse(new Situacao(false, null, null, null)));
+    }
+
+    private static LocalDate data(java.time.Instant instante) {
+        return instante == null ? null : instante.atZone(FUSO).toLocalDate();
     }
 
     /**

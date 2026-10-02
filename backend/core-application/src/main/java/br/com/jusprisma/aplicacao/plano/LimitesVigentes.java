@@ -45,7 +45,7 @@ public class LimitesVigentes {
         Assinatura assinatura = escopo.executarComo(tenantId,
                 () -> assinaturas.vigenteDoTenant(tenantId).orElse(null));
 
-        if (assinatura == null || !assinatura.vigente()) {
+        if (assinatura == null || !assinatura.vigente(java.time.Instant.now())) {
             throw new SemAssinaturaVigenteException();
         }
 

@@ -49,6 +49,18 @@ public interface RepositorioDeEventoDeCobranca {
      */
     Optional<String> efetivarPlanoContratado(UUID assinaturaId);
 
+    /**
+     * Cancela a assinatura honrando o período já pago: agenda o fim do acesso para a próxima
+     * cobrança (ou o fim da degustação) quando ela está no futuro, e cancela já nos demais
+     * casos. Não reagenda um cancelamento já agendado.
+     *
+     * @return o status resultante, ou vazio se não havia o que cancelar.
+     */
+    Optional<Assinatura.Status> agendarCancelamento(UUID assinaturaId, Instant agora);
+
+    /** Encerra as assinaturas cujo fim de acesso agendado já passou. */
+    int encerrarCancelamentosVencidos(Instant agora);
+
     record AssinaturaLocalizada(UUID assinaturaId, UUID tenantId, String planoCodigo, String status) {
     }
 

@@ -17,7 +17,7 @@ public class RepositorioDeAssinaturaJdbc implements RepositorioDeAssinatura {
 
     private static final String COLUNAS = """
             id, tenant_id, plano_codigo, status, inicio_em, fim_do_periodo, proxima_cobranca,
-            gateway_customer_id, gateway_subscription_id, plano_contratado""";
+            gateway_customer_id, gateway_subscription_id, plano_contratado, cancela_em""";
 
     private final JdbcClient jdbc;
 
@@ -116,7 +116,8 @@ public class RepositorioDeAssinaturaJdbc implements RepositorioDeAssinatura {
                 instante(rs, "proxima_cobranca"),
                 rs.getString("gateway_customer_id"),
                 rs.getString("gateway_subscription_id"),
-                rs.getString("plano_contratado"));
+                rs.getString("plano_contratado"),
+                instante(rs, "cancela_em"));
     }
 
     private static Timestamp timestamp(Instant instante) {

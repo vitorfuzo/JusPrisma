@@ -26,6 +26,7 @@ interface Situacao {
     contratado: boolean
     planoPendente: string | null
     proximaCobranca: string | null
+    acessoAte: string | null
   }
 }
 
@@ -175,7 +176,11 @@ export function Planos() {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
           Contratar
         </h2>
-        {contratacao.contratado ? (
+        {contratacao.acessoAte ? (
+          <Aviso tipo="informacao" titulo="Assinatura cancelada">
+            O acesso continua até {dataCurta(contratacao.acessoAte)}, o fim do período já pago.
+          </Aviso>
+        ) : contratacao.contratado ? (
           <Aviso tipo="informacao" titulo="Plano contratado">
             {pendente
               ? `O plano ${pendente.nome} passa a valer quando o primeiro pagamento for confirmado.`

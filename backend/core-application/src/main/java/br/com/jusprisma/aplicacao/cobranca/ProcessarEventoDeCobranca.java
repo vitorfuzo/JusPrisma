@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -124,9 +125,12 @@ public class ProcessarEventoDeCobranca {
                 log.warn("assinatura {} marcada inadimplente", assinatura.assinaturaId());
             }
             case ASSINATURA_CANCELADA -> {
-                eventos.atualizarStatus(assinatura.assinaturaId(),
-                        Assinatura.Status.CANCELADA, null);
-                log.info("assinatura {} cancelada", assinatura.assinaturaId());
+                // O escritório pagou até a próxima cobrança: cortar no dia do aviso tiraria
+                // o que já foi pago. O fim do acesso é agendado; ver V11.
+                Optional<Assinatura.Status> resultado =
+                        eventos.agendarCancelamento(assinatura.assinaturaId(), Instant.now());
+                log.info("assinatura {} cancelada no gateway; status agora {}",
+                        assinatura.assinaturaId(), resultado.map(Enum::name).orElse("inalterado"));
             }
             default -> {
                 return Resultado.IGNORADO;
