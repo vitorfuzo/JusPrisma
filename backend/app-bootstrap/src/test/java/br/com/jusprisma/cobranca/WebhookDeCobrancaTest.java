@@ -173,6 +173,25 @@ class WebhookDeCobrancaTest {
                 .isEqualTo(2);
     }
 
+    @Test
+    @DisplayName("pagamento confirmado sem identificador de pagamento não credita")
+    void pagamentoSemIdentificadorNaoCredita() throws Exception {
+        // Sem o pagamento não há como saber se o outro evento dele já creditou. Fica
+        // registrado para tratamento manual, em vez de arriscar crédito em dobro.
+        UUID tenant = criarConta();
+        String assinatura = vincularAoGateway(tenant);
+        int antes = creditos.saldo(tenant, TipoCredito.PERFIL);
+
+        enviar("""
+                {"id": "evt_%s", "event": "PAYMENT_CONFIRMED",
+                 "payment": {"subscription": "%s", "nextDueDate": "2026-12-01"}}
+                """.formatted(UUID.randomUUID(), assinatura))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.situacao").value("ignorado"));
+
+        assertThat(creditos.saldo(tenant, TipoCredito.PERFIL)).isEqualTo(antes);
+    }
+
     // ------------------------------------------------------------------ efeito
 
     @Test
