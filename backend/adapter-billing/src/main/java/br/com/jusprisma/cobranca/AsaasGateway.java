@@ -22,6 +22,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Period;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +48,11 @@ public class AsaasGateway implements GatewayDePagamento {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String NOME = "asaas";
     private static final Duration TEMPO_LIMITE = Duration.ofSeconds(20);
+    private static final ZoneId FUSO = ZoneId.of("America/Sao_Paulo");
+    // As duas metades do mesmo fato: a assinatura nasce mensal, e é um mês que se soma ao
+    // vencimento pago para saber a próxima cobrança.
+    private static final String CICLO = "MONTHLY";
+    private static final Period PERIODO_DO_CICLO = Period.ofMonths(1);
 
     private final WebClient cliente;
     private final String tokenDoWebhook;
@@ -143,7 +150,7 @@ public class AsaasGateway implements GatewayDePagamento {
                         "billingType", "UNDEFINED",
                         "value", valor,
                         "nextDueDate", dados.primeiraCobranca().toString(),
-                        "cycle", "MONTHLY",
+                        "cycle", CICLO,
                         "description", "JusPrisma " + dados.planoCodigo(),
                         "externalReference", dados.referenciaExterna()))
                 .retrieve()
@@ -211,7 +218,7 @@ public class AsaasGateway implements GatewayDePagamento {
                     id,
                     traduzir(tipoAsaas),
                     pagamento.path("subscription").asString(),
-                    proximoVencimento(pagamento),
+                    proximaCobranca(pagamento),
                     corpo));
         } catch (RuntimeException e) {
             log.warn("notificação do Asaas em formato inesperado; descartada", e);
@@ -240,16 +247,27 @@ public class AsaasGateway implements GatewayDePagamento {
         };
     }
 
-    private static Instant proximoVencimento(JsonNode no) {
-        String data = no.path("nextDueDate").asString();
-        if (data == null || data.isBlank()) {
+    /**
+     * A próxima cobrança é o vencimento desta mais um ciclo.
+     *
+     * <p>O {@code payment} do webhook traz só o {@code dueDate} da cobrança paga. Buscar o
+     * {@code nextDueDate} da assinatura no Asaas não serve: ele é o vencimento da próxima
+     * cobrança <em>a ser gerada</em>, que anda assim que o Asaas gera a seguinte — já vem um
+     * ciclo à frente logo depois da criação, e chega dois à frente quando um boleto é pago
+     * atrasado depois de gerada a cobrança seguinte, ainda em aberto.
+     */
+    private static Instant proximaCobranca(JsonNode pagamento) {
+        String vencimento = pagamento.path("dueDate").asString();
+        if (vencimento == null || vencimento.isBlank()) {
             return null;
         }
         try {
-            return LocalDate.parse(data)
-                    .atStartOfDay(java.time.ZoneId.of("America/Sao_Paulo"))
+            return LocalDate.parse(vencimento)
+                    .plus(PERIODO_DO_CICLO)
+                    .atStartOfDay(FUSO)
                     .toInstant();
         } catch (RuntimeException e) {
+            log.warn("vencimento do pagamento em formato inesperado: {}", vencimento);
             return null;
         }
     }
