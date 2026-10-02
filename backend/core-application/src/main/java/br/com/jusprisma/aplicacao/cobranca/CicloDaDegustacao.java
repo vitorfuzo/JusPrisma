@@ -85,6 +85,22 @@ public class CicloDaDegustacao {
     }
 
     /**
+     * Encerra as assinaturas canceladas cujo período pago acabou.
+     *
+     * <p>O acesso já termina na hora certa sem isto — {@code Assinatura.vigente} compara o
+     * fim agendado com o relógio. O job só deixa o status coerente com a realidade.
+     *
+     * @return quantas assinaturas foram encerradas
+     */
+    public int encerrarCancelamentosVencidos() {
+        int encerradas = cobranca.encerrarCancelamentosVencidos(Instant.now());
+        if (encerradas > 0) {
+            log.info("{} assinatura(s) cancelada(s) encerrada(s) ao fim do período pago", encerradas);
+        }
+        return encerradas;
+    }
+
+    /**
      * Converte as degustações vencidas.
      *
      * <p>Hoje a conversão apenas marca a assinatura como inadimplente, porque não há meio

@@ -1,7 +1,11 @@
 package br.com.jusprisma.cobranca;
 
 import br.com.jusprisma.JusPrismaApplication;
+import br.com.jusprisma.aplicacao.cobranca.CicloDaDegustacao;
+import br.com.jusprisma.aplicacao.cobranca.RepositorioDeEventoDeCobranca;
 import br.com.jusprisma.aplicacao.credito.Creditos;
+import br.com.jusprisma.aplicacao.plano.LimitesVigentes;
+import br.com.jusprisma.aplicacao.plano.SemAssinaturaVigenteException;
 import br.com.jusprisma.conta.CaixaDeSaidaDeTeste;
 import br.com.jusprisma.dominio.credito.TipoCredito;
 import org.junit.jupiter.api.DisplayName;
@@ -26,11 +30,15 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Base64;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -86,6 +94,17 @@ class WebhookDeCobrancaTest {
 
     @Autowired
     private Creditos creditos;
+
+    @Autowired
+    private LimitesVigentes limites;
+
+    @Autowired
+    private CicloDaDegustacao ciclo;
+
+    @Autowired
+    private RepositorioDeEventoDeCobranca cobranca;
+
+    private static final ZoneId FUSO = ZoneId.of("America/Sao_Paulo");
 
     // ------------------------------------------------------------ autenticação
 
@@ -246,26 +265,93 @@ class WebhookDeCobrancaTest {
         assertThat(statusDaAssinatura(tenant)).isEqualTo("INADIMPLENTE");
     }
 
+    // ------------------------------------------------------------- cancelamento
+
     @ParameterizedTest
     @ValueSource(strings = {"SUBSCRIPTION_DELETED", "SUBSCRIPTION_INACTIVATED"})
-    @DisplayName("assinatura removida ou inativada no gateway é cancelada aqui")
-    void eventoDeAssinaturaCancela(String evento) throws Exception {
+    @DisplayName("assinatura paga cancelada no gateway continua valendo até o fim do período pago")
+    void cancelamentoValeNoFimDoPeriodoPago(String evento) throws Exception {
         UUID tenant = criarConta();
         String assinatura = vincularAoGateway(tenant);
+        LocalDate vencimento = LocalDate.now(FUSO).plusDays(10);
+        pagar(assinatura, vencimento);
 
-        // Formato documentado pelo Asaas para eventos de assinatura: o objeto subscription
-        // vem na raiz, com o próprio id, e não existe objeto payment.
-        enviar("""
-                {"id": "evt_%s", "event": "%s",
-                 "subscription": {"object": "subscription", "id": "%s",
-                                  "customer": "cus_ficticio", "cycle": "MONTHLY",
-                                  "nextDueDate": "2026-11-16", "status": "INACTIVE",
-                                  "deleted": true}}
-                """.formatted(UUID.randomUUID(), evento, assinatura))
+        cancelar(assinatura, evento)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.situacao").value("processado"));
 
+        // Pagou até a próxima cobrança: o acesso vai até lá, e não acaba no dia do cancelamento.
+        assertThat(statusDaAssinatura(tenant)).isEqualTo("ATIVA");
+        assertThat(cancelaEm(tenant)).isEqualTo(vencimento.plusMonths(1));
+        assertThat(limites.planoDe(tenant)).isNotNull();
+    }
+
+    @Test
+    @DisplayName("passado o fim do período, o acesso acaba mesmo antes de o job encerrar a assinatura")
+    void cancelamentoVencidoCortaAcesso() throws Exception {
+        UUID tenant = criarConta();
+        String assinatura = vincularAoGateway(tenant);
+        pagar(assinatura, LocalDate.now(FUSO).plusDays(10));
+        cancelar(assinatura, "SUBSCRIPTION_DELETED").andExpect(status().isOk());
+
+        executarComoDono("UPDATE assinatura SET cancela_em = now() - interval '1 minute' WHERE tenant_id = ?",
+                tenant);
+
+        assertThatThrownBy(() -> limites.planoDe(tenant))
+                .isInstanceOf(SemAssinaturaVigenteException.class);
+
+        ciclo.encerrarCancelamentosVencidos();
         assertThat(statusDaAssinatura(tenant)).isEqualTo("CANCELADA");
+    }
+
+    @Test
+    @DisplayName("inadimplente cancelado perde o acesso na hora: não há período pago a honrar")
+    void inadimplenteCanceladoPerdeAcessoNaHora() throws Exception {
+        UUID tenant = criarConta();
+        String assinatura = vincularAoGateway(tenant);
+        enviar("""
+                {"id": "evt_%s", "event": "PAYMENT_OVERDUE",
+                 "payment": {"id": "pay_%s", "subscription": "%s"}}
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), assinatura))
+                .andExpect(status().isOk());
+
+        cancelar(assinatura, "SUBSCRIPTION_INACTIVATED").andExpect(status().isOk());
+
+        assertThat(statusDaAssinatura(tenant)).isEqualTo("CANCELADA");
+        assertThatThrownBy(() -> limites.planoDe(tenant))
+                .isInstanceOf(SemAssinaturaVigenteException.class);
+    }
+
+    @Test
+    @DisplayName("degustação cancelada vale até o fim e não recebe o aviso de cobrança")
+    void degustacaoCanceladaValeAteOFim() throws Exception {
+        UUID tenant = criarConta();
+        String assinatura = vincularAoGateway(tenant);
+
+        cancelar(assinatura, "SUBSCRIPTION_DELETED").andExpect(status().isOk());
+
+        assertThat(statusDaAssinatura(tenant)).isEqualTo("TRIAL");
+        assertThat(cancelaEm(tenant)).isNotNull();
+        // O aviso diz que a cobrança vai começar; para quem cancelou, seria falso.
+        assertThat(cobranca.trialsAAvisar(Instant.now().plus(Duration.ofDays(365))))
+                .noneMatch(trial -> trial.tenantId().equals(tenant));
+    }
+
+    @Test
+    @DisplayName("o mesmo cancelamento entregue duas vezes não muda a data do fim do acesso")
+    void cancelamentoReentregue() throws Exception {
+        UUID tenant = criarConta();
+        String assinatura = vincularAoGateway(tenant);
+        pagar(assinatura, LocalDate.now(FUSO).plusDays(10));
+        String idDoEvento = "evt_" + UUID.randomUUID();
+
+        enviar(corpoDeCancelamento(idDoEvento, "SUBSCRIPTION_DELETED", assinatura)).andExpect(status().isOk());
+        LocalDate primeiro = cancelaEm(tenant);
+        enviar(corpoDeCancelamento(idDoEvento, "SUBSCRIPTION_DELETED", assinatura))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.situacao").value("repetido"));
+
+        assertThat(cancelaEm(tenant)).isEqualTo(primeiro);
     }
 
     @Test
@@ -385,6 +471,52 @@ class WebhookDeCobrancaTest {
                 rs.next();
                 return rs.getObject(1, LocalDate.class);
             }
+        }
+    }
+
+    private void pagar(String assinatura, LocalDate vencimento) throws Exception {
+        enviar("""
+                {"id": "evt_%s", "event": "PAYMENT_RECEIVED",
+                 "payment": {"id": "pay_%s", "subscription": "%s", "dueDate": "%s"}}
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), assinatura, vencimento))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.situacao").value("processado"));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions cancelar(String assinatura, String evento)
+            throws Exception {
+        return enviar(corpoDeCancelamento("evt_" + UUID.randomUUID(), evento, assinatura));
+    }
+
+    // Formato documentado pelo Asaas para eventos de assinatura: o objeto subscription vem na
+    // raiz, com o próprio id, e não existe objeto payment.
+    private static String corpoDeCancelamento(String idDoEvento, String evento, String assinatura) {
+        return """
+                {"id": "%s", "event": "%s",
+                 "subscription": {"object": "subscription", "id": "%s",
+                                  "customer": "cus_ficticio", "cycle": "MONTHLY",
+                                  "status": "INACTIVE", "deleted": true}}
+                """.formatted(idDoEvento, evento, assinatura);
+    }
+
+    private LocalDate cancelaEm(UUID tenant) throws SQLException {
+        try (Connection dono = conexaoDono();
+             PreparedStatement ps = dono.prepareStatement("""
+                     SELECT (cancela_em AT TIME ZONE 'America/Sao_Paulo')::date
+                       FROM assinatura WHERE tenant_id = ?
+                     """)) {
+            ps.setObject(1, tenant);
+            try (var rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getObject(1, LocalDate.class);
+            }
+        }
+    }
+
+    private static void executarComoDono(String sql, UUID tenant) throws SQLException {
+        try (Connection dono = conexaoDono(); PreparedStatement ps = dono.prepareStatement(sql)) {
+            ps.setObject(1, tenant);
+            ps.executeUpdate();
         }
     }
 

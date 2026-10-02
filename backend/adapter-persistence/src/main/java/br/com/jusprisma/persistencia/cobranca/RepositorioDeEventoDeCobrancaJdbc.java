@@ -173,4 +173,29 @@ public class RepositorioDeEventoDeCobrancaJdbc implements RepositorioDeEventoDeC
                 .filter(java.util.Objects::nonNull)
                 .findFirst();
     }
+
+    @Override
+    @Transactional
+    public Optional<Assinatura.Status> agendarCancelamento(UUID assinaturaId, Instant agora) {
+        // A função devolve nulo quando não havia o que cancelar; a leitura é manual pelo
+        // mesmo motivo de efetivarPlanoContratado.
+        return jdbc.sql("SELECT cobranca_agendar_cancelamento(:id, :agora)")
+                .param("id", assinaturaId)
+                .param("agora", Timestamp.from(agora))
+                .query((rs, linha) -> rs.getString(1))
+                .list()
+                .stream()
+                .filter(java.util.Objects::nonNull)
+                .map(Assinatura.Status::valueOf)
+                .findFirst();
+    }
+
+    @Override
+    @Transactional
+    public int encerrarCancelamentosVencidos(Instant agora) {
+        return jdbc.sql("SELECT cobranca_encerrar_cancelamentos(:agora)")
+                .param("agora", Timestamp.from(agora))
+                .query(Integer.class)
+                .single();
+    }
 }
