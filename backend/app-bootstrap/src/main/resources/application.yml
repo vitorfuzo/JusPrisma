@@ -48,6 +48,8 @@ resilience4j:
         # para abrir o circuito nem dispara retentativa.
         ignore-exceptions:
           - br.com.jusprisma.aplicacao.cobranca.CobrancaRecusadaException
+          # Chave errada continua errada na próxima tentativa.
+          - br.com.jusprisma.cobranca.CredencialRecusadaPeloAsaasException
   circuitbreaker:
     instances:
       asaas:

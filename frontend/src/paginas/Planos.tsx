@@ -185,7 +185,12 @@ export function Planos() {
             Para trocar de plano, fale com o suporte.
           </Aviso>
         ) : sessao?.papel === 'OWNER' ? (
-          <FormularioDeContratacao planos={contrataveis} />
+          <FormularioDeContratacao
+            planos={contrataveis.map((p) => ({
+              codigo: p.codigo,
+              rotulo: `${p.nome} · ${reais(p.precoCentavos)} por mês`,
+            }))}
+          />
         ) : (
           <p className="text-sm text-slate-500">
             Só o administrador do escritório pode contratar um plano.

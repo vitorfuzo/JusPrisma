@@ -268,7 +268,7 @@ public class AsaasGateway implements GatewayDePagamento {
             int status = e.getStatusCode().value();
             if (status == 401 || status == 403) {
                 log.error("Asaas recusou a credencial ({}); verifique a chave configurada", status);
-                throw new GatewayIndisponivelException("credencial do gateway recusada", e);
+                throw new CredencialRecusadaPeloAsaasException(e);
             }
             if (e.getStatusCode().is4xxClientError()) {
                 throw new CobrancaRecusadaException(descricaoDoErro(e.getResponseBodyAsString()));

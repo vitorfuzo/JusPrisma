@@ -1,7 +1,8 @@
 -- Dados de contratação: documento de cobrança e plano escolhido aguardando pagamento.
 --
--- Migração só aditiva. As duas colunas nascem nulas e sem constraint, e nulo é o valor
--- correto para toda linha existente: ninguém informou documento nem contratou plano ainda.
+-- Migração só aditiva. As duas colunas nascem nulas, e nulo é o valor correto para toda
+-- linha existente: ninguém informou documento nem contratou plano ainda. O CHECK de formato
+-- aceita nulo, então não há linha existente que o viole.
 -- Não há backfill.
 --
 -- Desfazer:

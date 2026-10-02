@@ -7,8 +7,8 @@ import { Campo } from '../componentes/Campo'
 
 interface PlanoContratavel {
   codigo: string
-  nome: string
-  precoCentavos: number
+  /** Nome e preço já formatados por quem chama. */
+  rotulo: string
 }
 
 interface Contratacao {
@@ -34,10 +34,6 @@ function mascararDocumento(valor: string): string {
     .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
     .replace(/\.(\d{3})(\d)/, '.$1/$2')
     .replace(/(\d{4})(\d{1,2})$/, '$1-$2')
-}
-
-function reais(centavos: number): string {
-  return (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
 export function FormularioDeContratacao({ planos }: { planos: PlanoContratavel[] }) {
@@ -84,7 +80,7 @@ export function FormularioDeContratacao({ planos }: { planos: PlanoContratavel[]
               checked={plano === p.codigo}
               onChange={() => setPlano(p.codigo)}
             />
-            {p.nome} · {reais(p.precoCentavos)} por mês
+            {p.rotulo}
           </label>
         ))}
       </fieldset>
