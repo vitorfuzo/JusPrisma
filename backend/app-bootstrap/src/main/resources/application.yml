@@ -50,6 +50,15 @@ resilience4j:
           - br.com.jusprisma.aplicacao.cobranca.CobrancaRecusadaException
           # Chave errada continua errada na próxima tentativa.
           - br.com.jusprisma.cobranca.CredencialRecusadaPeloAsaasException
+      tjdft:
+        max-attempts: 3
+        wait-duration: 1s
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        # Consulta fora do contrato e resposta fora do formato não melhoram repetindo.
+        ignore-exceptions:
+          - java.lang.IllegalArgumentException
+          - br.com.jusprisma.aplicacao.ingestao.RespostaInesperadaDaFonteException
   circuitbreaker:
     instances:
       asaas:
@@ -59,6 +68,21 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         ignore-exceptions:
           - br.com.jusprisma.aplicacao.cobranca.CobrancaRecusadaException
+      tjdft:
+        sliding-window-size: 20
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 2
+        ignore-exceptions:
+          - java.lang.IllegalArgumentException
+  ratelimiter:
+    instances:
+      # O TJDFT não publica limite. Uma chamada a cada meio segundo é o mesmo espaçamento
+      # que o DJEN exige, e basta para a ingestão: 40 acórdãos por chamada.
+      tjdft:
+        limit-for-period: 1
+        limit-refresh-period: 500ms
+        timeout-duration: 30s
 
 management:
   endpoints:
@@ -96,6 +120,8 @@ jusprisma:
     nome: ${JUSPRISMA_OPERADOR_INICIAL_NOME:Operador}
   jobs:
     habilitados: ${JUSPRISMA_JOBS_HABILITADOS:true}
+  tjdft:
+    url-base: ${JUSPRISMA_TJDFT_BASE_URL:https://jurisdf.tjdft.jus.br}
   asaas:
     url-base: ${JUSPRISMA_ASAAS_BASE_URL:https://api-sandbox.asaas.com/v3}
     chave: ${JUSPRISMA_ASAAS_API_KEY:}
