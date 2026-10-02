@@ -6,6 +6,8 @@ import br.com.jusprisma.conta.CaixaDeSaidaDeTeste;
 import br.com.jusprisma.dominio.credito.TipoCredito;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -199,6 +201,28 @@ class WebhookDeCobrancaTest {
         // Inadimplente continua vigente de propósito: cortar no primeiro boleto atrasado
         // perde o cliente que só trocou de cartão.
         assertThat(statusDaAssinatura(tenant)).isEqualTo("INADIMPLENTE");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"SUBSCRIPTION_DELETED", "SUBSCRIPTION_INACTIVATED"})
+    @DisplayName("assinatura removida ou inativada no gateway é cancelada aqui")
+    void eventoDeAssinaturaCancela(String evento) throws Exception {
+        UUID tenant = criarConta();
+        String assinatura = vincularAoGateway(tenant);
+
+        // Formato documentado pelo Asaas para eventos de assinatura: o objeto subscription
+        // vem na raiz, com o próprio id, e não existe objeto payment.
+        enviar("""
+                {"id": "evt_%s", "event": "%s",
+                 "subscription": {"object": "subscription", "id": "%s",
+                                  "customer": "cus_ficticio", "cycle": "MONTHLY",
+                                  "nextDueDate": "2026-11-16", "status": "INACTIVE",
+                                  "deleted": true}}
+                """.formatted(UUID.randomUUID(), evento, assinatura))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.situacao").value("processado"));
+
+        assertThat(statusDaAssinatura(tenant)).isEqualTo("CANCELADA");
     }
 
     @Test

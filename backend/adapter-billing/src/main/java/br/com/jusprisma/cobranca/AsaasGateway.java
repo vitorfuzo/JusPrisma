@@ -217,7 +217,7 @@ public class AsaasGateway implements GatewayDePagamento {
             return Optional.of(new EventoDeCobranca(
                     id,
                     traduzir(tipoAsaas),
-                    pagamento.path("subscription").asString(),
+                    assinaturaReferida(raiz),
                     proximaCobranca(pagamento),
                     corpo));
         } catch (RuntimeException e) {
@@ -245,6 +245,22 @@ public class AsaasGateway implements GatewayDePagamento {
                     EventoDeCobranca.Tipo.ASSINATURA_CANCELADA;
             default -> EventoDeCobranca.Tipo.DESCONHECIDO;
         };
+    }
+
+    /**
+     * O id da assinatura no Asaas, que muda de lugar conforme o tipo de evento.
+     *
+     * <p>Evento de cobrança traz o objeto {@code payment}, e a assinatura é o campo
+     * {@code payment.subscription}. Evento de assinatura não traz {@code payment}: o próprio
+     * objeto {@code subscription} vem na raiz, com o {@code id}. Ler só o primeiro fazia todo
+     * cancelamento chegar sem assinatura e ser ignorado.
+     */
+    private static String assinaturaReferida(JsonNode raiz) {
+        JsonNode pagamento = raiz.path("payment");
+        if (pagamento.isObject()) {
+            return pagamento.path("subscription").asString();
+        }
+        return raiz.path("subscription").path("id").asString();
     }
 
     /**
