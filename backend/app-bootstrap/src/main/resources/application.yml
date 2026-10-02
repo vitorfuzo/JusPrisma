@@ -59,6 +59,16 @@ resilience4j:
         ignore-exceptions:
           - java.lang.IllegalArgumentException
           - br.com.jusprisma.aplicacao.ingestao.RespostaInesperadaDaFonteException
+      datajud:
+        max-attempts: 3
+        # O cluster do CNJ rejeita busca quando está sobrecarregado; voltar logo em seguida
+        # só soma carga. Espera longa e crescente.
+        wait-duration: 5s
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        ignore-exceptions:
+          - java.lang.IllegalArgumentException
+          - br.com.jusprisma.aplicacao.ingestao.RespostaInesperadaDaFonteException
   circuitbreaker:
     instances:
       asaas:
@@ -75,6 +85,15 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 2
         ignore-exceptions:
           - java.lang.IllegalArgumentException
+      datajud:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 120s
+        permitted-number-of-calls-in-half-open-state: 1
+        # Consultas legítimas levam dezenas de segundos; só conta como lenta o que passa disso.
+        slow-call-duration-threshold: 70s
+        ignore-exceptions:
+          - java.lang.IllegalArgumentException
   ratelimiter:
     instances:
       # O TJDFT não publica limite. Uma chamada a cada meio segundo é o mesmo espaçamento
@@ -83,6 +102,12 @@ resilience4j:
         limit-for-period: 1
         limit-refresh-period: 500ms
         timeout-duration: 30s
+      # Sem limite publicado, e o cluster já mostra sobrecarga. Uma consulta a cada 2 s,
+      # com até 100 processos cada, basta para enriquecer a ingestão do TJDFT.
+      datajud:
+        limit-for-period: 1
+        limit-refresh-period: 2s
+        timeout-duration: 120s
 
 management:
   endpoints:
@@ -122,6 +147,10 @@ jusprisma:
     habilitados: ${JUSPRISMA_JOBS_HABILITADOS:true}
   tjdft:
     url-base: ${JUSPRISMA_TJDFT_BASE_URL:https://jurisdf.tjdft.jus.br}
+  datajud:
+    url-base: ${JUSPRISMA_DATAJUD_BASE_URL:https://api-publica.datajud.cnj.jus.br}
+    # Chave pública do wiki do DataJud; ver .env.example.
+    chave: ${JUSPRISMA_DATAJUD_API_KEY:}
   asaas:
     url-base: ${JUSPRISMA_ASAAS_BASE_URL:https://api-sandbox.asaas.com/v3}
     chave: ${JUSPRISMA_ASAAS_API_KEY:}

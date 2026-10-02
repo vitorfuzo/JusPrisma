@@ -128,7 +128,7 @@ e o CNJ pode trocá-la a qualquer momento. O cabeçalho é `Authorization: APIKe
 
 Corpo em Elasticsearch DSL; paginação por `search_after` ordenando por `@timestamp`.
 
-### Quatro armadilhas verificadas contra a API real
+### Armadilhas verificadas contra a API real
 
 Todas silenciosas: nenhuma gera erro, todas produzem dado errado.
 
@@ -164,6 +164,28 @@ falha; passar para um parser leniente pode produzir data errada em silêncio.
 
 É o teto do Elasticsearch, não o total real. Sem `"track_total_hits": true`, qualquer
 contagem acima disso mente. O TJDFT tem **541.030** processos no índice, não 10.000.
+
+**5. Um processo tem um registro por grau.**
+
+O mesmo `numeroProcesso` aparece como `TJDFT_G1_<número>` e `TJDFT_G2_<número>`, com
+classe, órgão e data de ajuizamento próprios de cada grau. Para enriquecer acórdão, o
+registro certo é o `G2`; pegar o primeiro que vier mistura a classe da ação de 1º grau com
+a do recurso. Verificado em 02/10/2026.
+
+**6. O cluster sobrecarregado responde 200 com resultado parcial — e é lento.**
+
+Verificado em 02/10/2026:
+
+- consultas por `terms` em `numeroProcesso` levaram de **30 a 50 s** (medido pelo próprio
+  `took`);
+- com o cluster sob carga, a resposta veio `200 OK` com `"_shards": {"failed": 2}` e
+  **zero hits** para processos que existem — `es_rejected_execution_exception` nos shards;
+- a busca por `ids` caiu em **504 aos 60 s**, corte de um proxy na frente do cluster.
+
+O adaptador trata `_shards.failed > 0` e `timed_out: true` como indisponibilidade (repete
+com espera longa), nunca como "processo não encontrado"; consulta em lote de até 100
+processos para amortizar a latência; e pede só os campos usados (`_source`), sem os
+`movimentos`, que são a maior parte do documento.
 
 O que o DataJud acrescenta ao que já temos do TJDFT:
 
@@ -214,8 +236,9 @@ Regras que valem para qualquer fonte externa, sem exceção:
    "zero resultados".
 3. **Sigilo é filtrado na ingestão**, não na exibição.
 4. **Nome de parte é pseudonimizado** antes de entrar na base analítica.
-5. **O domínio não conhece nenhuma destas APIs.** Tudo aqui vive atrás da porta
-   `PortalDecisoes`; trocar de fonte não toca em regra de negócio.
+5. **O domínio não conhece nenhuma destas APIs.** Tudo aqui vive atrás das portas
+   `FonteDeAcordaos` (TJDFT) e `FonteDeMetadadosProcessuais` (DataJud); trocar de fonte
+   não toca em regra de negócio.
 
 ---
 
@@ -224,6 +247,6 @@ Regras que valem para qualquer fonte externa, sem exceção:
 | Item | Por quê |
 |---|---|
 | Endpoint de inteiro teor do TJDFT | Sete rotas plausíveis retornaram 404. Falta ler o PDF oficial de documentação. Enquanto não existir, a Camada 2 opera sobre a ementa e a limitação é declarada no relatório. |
-| DataJud com chave real | Nada foi exercitado contra a API de verdade. |
+| Taxa de casamento TJDFT × DataJud | Em 02/10/2026, 27 de 36 processos de uma página recente do TJDFT foram encontrados no DataJud (`G2`). Medir em volume e ver se os ausentes são atraso de indexação ou falta de cobertura. |
 | Rate limit do TJDFT | Não publicado. Descobrir empiricamente, com cuidado, antes de ingestão em volume. |
 | Estabilidade de `identificador` | A chave natural depende de ele não mudar entre versões do acórdão. O campo `versao` sugere que acórdãos são revisados. |
