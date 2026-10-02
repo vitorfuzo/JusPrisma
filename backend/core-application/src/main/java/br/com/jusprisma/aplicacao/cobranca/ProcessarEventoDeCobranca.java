@@ -86,6 +86,15 @@ public class ProcessarEventoDeCobranca {
 
         RepositorioDeEventoDeCobranca.AssinaturaLocalizada assinatura = encontrada.get();
 
+        if (Assinatura.Status.CANCELADA.name().equals(assinatura.status())) {
+            // Cancelamento é terminal. Reativar quebraria a unicidade com a assinatura da
+            // recontratação, e o webhook ficaria em erro com o gateway reenviando sem fim.
+            // Um pagamento que chegue aqui é conciliado à mão, a partir deste aviso.
+            log.warn("evento {} ({}) para a assinatura cancelada {}; registrado sem efeito",
+                    evento.idExterno(), evento.tipo(), assinatura.assinaturaId());
+            return Resultado.IGNORADO;
+        }
+
         switch (evento.tipo()) {
             case PAGAMENTO_CONFIRMADO -> {
                 if (evento.pagamentoNoGateway() == null || evento.pagamentoNoGateway().isBlank()) {
@@ -118,6 +127,12 @@ public class ProcessarEventoDeCobranca {
                 log.info("assinatura {} ativada por pagamento confirmado", assinatura.assinaturaId());
             }
             case PAGAMENTO_FALHOU -> {
+                if (Assinatura.Status.AGUARDANDO_PAGAMENTO.name().equals(assinatura.status())) {
+                    // Inadimplente tem acesso. Quem recontratou e nunca pagou, não.
+                    log.info("primeira cobrança da assinatura {} não paga; segue aguardando",
+                            assinatura.assinaturaId());
+                    return Resultado.IGNORADO;
+                }
                 // Inadimplente mantém acesso de propósito — ver Assinatura.vigente().
                 // Cortar no primeiro boleto atrasado perde cliente que só trocou de cartão.
                 eventos.atualizarStatus(assinatura.assinaturaId(),

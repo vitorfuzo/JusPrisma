@@ -26,7 +26,12 @@ public record Assinatura(
         ATIVA,
         /** Cobrança falhou. Mantém acesso por um período de tolerância antes de cancelar. */
         INADIMPLENTE,
-        CANCELADA
+        CANCELADA,
+        /**
+         * Recontratação depois de um cancelamento, à espera do primeiro pagamento. Não dá
+         * acesso: quem só clicou em contratar não volta a usar o produto antes de pagar.
+         */
+        AGUARDANDO_PAGAMENTO
     }
 
     public Assinatura {
@@ -42,6 +47,13 @@ public record Assinatura(
         return new Assinatura(
                 UUID.randomUUID(), tenantId, planoCodigo, Status.TRIAL,
                 Instant.now(), fimDoTrial, fimDoTrial, null, null, null, null);
+    }
+
+    /** Assinatura nova de quem volta depois de cancelar. Sem degustação: cobra no dia. */
+    public static Assinatura aguardandoPagamento(UUID tenantId, String planoCodigo) {
+        return new Assinatura(
+                UUID.randomUUID(), tenantId, planoCodigo, Status.AGUARDANDO_PAGAMENTO,
+                Instant.now(), null, null, null, null, null, null);
     }
 
     /** Já existe assinatura criada no gateway: contratar de novo cobraria em dobro. */

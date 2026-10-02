@@ -284,6 +284,179 @@ class ContratacaoDePlanoTest {
         assertThat(erro).doesNotContain("12345678900");
     }
 
+    // ------------------------------------------------------------- recontratação
+
+    @Test
+    @DisplayName("escritório com assinatura cancelada contrata de novo: assinatura nova, sem acesso até pagar")
+    void canceladoContrataDeNovo() throws Exception {
+        Conta conta = criarConta();
+        UUID antiga = UUID.fromString(coluna("SELECT id FROM assinatura WHERE tenant_id = ?", conta.tenantId()));
+        executar("UPDATE assinatura SET status = 'CANCELADA', gateway_subscription_id = 'sub_antiga_"
+                + antiga + "' WHERE id = ?", antiga);
+
+        mockMvc.perform(get("/api/v1/assinatura").header("Authorization", "Bearer " + conta.acesso()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plano").doesNotExist())
+                .andExpect(jsonPath("$.contratacao.contratado").value(false));
+
+        LocalDate hoje = LocalDate.now(FUSO);
+        contratar(conta.acesso(), "ESCRITORIO", CPF)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.primeiraCobranca").value(hoje.toString()));
+
+        assertThat(gateway.assinaturas).singleElement().satisfies(assinatura -> {
+            assertThat(assinatura.referenciaExterna())
+                    .as("a referência é a assinatura nova; a antiga não pode ser reencontrada")
+                    .isNotEqualTo(antiga.toString())
+                    .isEqualTo(coluna("SELECT id FROM assinatura WHERE tenant_id = ? AND status = 'AGUARDANDO_PAGAMENTO'",
+                            conta.tenantId()));
+            assertThat(assinatura.primeiraCobranca()).as("sem degustação de novo").isEqualTo(hoje);
+        });
+        assertThat(coluna("SELECT status FROM assinatura WHERE id = ?", antiga))
+                .as("a cancelada fica no histórico").isEqualTo("CANCELADA");
+        assertThat(coluna("SELECT plano_contratado FROM assinatura WHERE tenant_id = ? AND status = 'AGUARDANDO_PAGAMENTO'",
+                conta.tenantId())).isEqualTo("ESCRITORIO");
+
+        mockMvc.perform(get("/api/v1/assinatura").header("Authorization", "Bearer " + conta.acesso()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plano").doesNotExist())
+                .andExpect(jsonPath("$.contratacao.contratado").value(true))
+                .andExpect(jsonPath("$.contratacao.planoPendente").value("ESCRITORIO"));
+        contratar(conta.acesso(), "SOLO", CPF).andExpect(status().isConflict());
+        assertThat(gateway.assinaturas).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("o primeiro pagamento da recontratação ativa a assinatura nova e recarrega")
+    void primeiroPagamentoDaRecontratacaoAtiva() throws Exception {
+        Conta conta = criarConta();
+        cancelarAssinaturaAtual(conta.tenantId());
+        contratar(conta.acesso(), "ESCRITORIO", CPF).andExpect(status().isOk());
+        String nova = coluna("SELECT gateway_subscription_id FROM assinatura WHERE tenant_id = ? AND status = 'AGUARDANDO_PAGAMENTO'",
+                conta.tenantId());
+
+        webhook("PAYMENT_CONFIRMED", nova).andExpect(status().isOk());
+
+        assertThat(coluna("SELECT status || ':' || plano_codigo FROM assinatura WHERE tenant_id = ? AND status <> 'CANCELADA'",
+                conta.tenantId())).isEqualTo("ATIVA:ESCRITORIO");
+        assertThat(coluna("""
+                SELECT string_agg(DISTINCT referencia_id, ',') FROM credito_lancamento
+                 WHERE tenant_id = ? AND motivo = 'renovação do plano'
+                """, conta.tenantId())).isEqualTo("ESCRITORIO");
+        mockMvc.perform(get("/api/v1/assinatura").header("Authorization", "Bearer " + conta.acesso()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plano.codigo").value("ESCRITORIO"));
+    }
+
+    @Test
+    @DisplayName("evento atrasado da assinatura cancelada não a reativa nem credita")
+    void eventoDaCanceladaNaoReativa() throws Exception {
+        Conta conta = criarConta();
+        String antiga = cancelarAssinaturaAtual(conta.tenantId());
+        contratar(conta.acesso(), "ESCRITORIO", CPF).andExpect(status().isOk());
+
+        webhook("PAYMENT_CONFIRMED", antiga).andExpect(status().isOk());
+        webhook("PAYMENT_OVERDUE", antiga).andExpect(status().isOk());
+
+        assertThat(coluna("SELECT status FROM assinatura WHERE gateway_subscription_id = ?", antiga))
+                .isEqualTo("CANCELADA");
+        assertThat(coluna("SELECT status FROM assinatura WHERE tenant_id = ? AND gateway_subscription_id <> '" + antiga + "'",
+                conta.tenantId())).isEqualTo("AGUARDANDO_PAGAMENTO");
+        assertThat(coluna("SELECT count(*) FROM credito_lancamento WHERE tenant_id = ? AND motivo = 'renovação do plano'",
+                conta.tenantId())).as("crédito só contra pagamento da assinatura corrente").isEqualTo("0");
+    }
+
+    @Test
+    @DisplayName("cobrança vencida na recontratação não pagou nada e não dá acesso")
+    void cobrancaVencidaNaoDaAcesso() throws Exception {
+        Conta conta = criarConta();
+        cancelarAssinaturaAtual(conta.tenantId());
+        contratar(conta.acesso(), "ESCRITORIO", CPF).andExpect(status().isOk());
+        String nova = coluna("SELECT gateway_subscription_id FROM assinatura WHERE tenant_id = ? AND status = 'AGUARDANDO_PAGAMENTO'",
+                conta.tenantId());
+
+        webhook("PAYMENT_OVERDUE", nova).andExpect(status().isOk());
+
+        assertThat(coluna("SELECT status FROM assinatura WHERE gateway_subscription_id = ?", nova))
+                .as("inadimplente teria acesso; quem nunca pagou não tem")
+                .isEqualTo("AGUARDANDO_PAGAMENTO");
+    }
+
+    @Test
+    @DisplayName("cancelamento agendado que já venceu, antes do job, não impede contratar")
+    void cancelamentoVencidoSemJob() throws Exception {
+        Conta conta = criarConta();
+        UUID antiga = UUID.fromString(coluna("SELECT id FROM assinatura WHERE tenant_id = ?", conta.tenantId()));
+        executar("""
+                UPDATE assinatura SET status = 'ATIVA', gateway_subscription_id = 'sub_vencida',
+                       cancela_em = now() - interval '1 hour'
+                 WHERE id = ?
+                """, antiga);
+
+        contratar(conta.acesso(), "SOLO", CPF).andExpect(status().isOk());
+
+        assertThat(coluna("SELECT status FROM assinatura WHERE id = ?", antiga)).isEqualTo("CANCELADA");
+        assertThat(gateway.assinaturas).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("no período pago de uma assinatura cancelada, contratar é conflito")
+    void periodoPagoNaoRecontrata() throws Exception {
+        Conta conta = criarConta();
+        executar("""
+                UPDATE assinatura SET status = 'ATIVA', gateway_subscription_id = 'sub_em_periodo',
+                       cancela_em = now() + interval '10 days'
+                 WHERE tenant_id = ?
+                """, conta.tenantId());
+
+        contratar(conta.acesso(), "SOLO", CPF).andExpect(status().isConflict());
+
+        assertThat(gateway.assinaturas).isEmpty();
+    }
+
+    @Test
+    @DisplayName("falha do gateway na recontratação: a nova tentativa usa a mesma referência")
+    void falhaNaRecontratacaoReaproveitaReferencia() throws Exception {
+        Conta conta = criarConta();
+        cancelarAssinaturaAtual(conta.tenantId());
+        gateway.falharNaProximaAssinatura.set(true);
+
+        contratar(conta.acesso(), "SOLO", CPF).andExpect(status().isServiceUnavailable());
+        contratar(conta.acesso(), "SOLO", CPF).andExpect(status().isOk());
+
+        assertThat(gateway.referenciasTentadas)
+                .as("referência diferente criaria segunda assinatura no Asaas, com cobrança em dobro")
+                .hasSize(2).containsOnly(gateway.referenciasTentadas.getFirst());
+        assertThat(coluna("SELECT count(*) FROM assinatura WHERE tenant_id = ? AND status <> 'CANCELADA'",
+                conta.tenantId())).isEqualTo("1");
+    }
+
+    @Test
+    @DisplayName("duas recontratações simultâneas geram uma assinatura só")
+    void recontratacoesSimultaneas() throws Exception {
+        Conta conta = criarConta();
+        cancelarAssinaturaAtual(conta.tenantId());
+
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            var largada = new java.util.concurrent.CountDownLatch(1);
+            java.util.concurrent.Callable<Integer> tentativa = () -> {
+                largada.await();
+                return contratar(conta.acesso(), "SOLO", CPF).andReturn().getResponse().getStatus();
+            };
+            var a = executor.submit(tentativa);
+            var b = executor.submit(tentativa);
+            largada.countDown();
+            assertThat(List.of(a.get(), b.get())).containsExactlyInAnyOrder(200, 409);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(gateway.assinaturas).hasSize(1);
+        assertThat(coluna("SELECT count(*) FROM assinatura WHERE tenant_id = ? AND status <> 'CANCELADA'",
+                conta.tenantId())).isEqualTo("1");
+    }
+
     // ------------------------------------------------------------------ apoio
 
     private record Conta(UUID tenantId, String acesso) {
@@ -333,10 +506,37 @@ class ContratacaoDePlanoTest {
         }
     }
 
-    private static String coluna(String sql, UUID tenant) throws SQLException {
+    /** Cancela a assinatura atual como o job faria, com um id no gateway; devolve esse id. */
+    private String cancelarAssinaturaAtual(UUID tenant) throws SQLException {
+        String noGateway = "sub_cancelada_" + UUID.randomUUID();
+        executar("UPDATE assinatura SET status = 'CANCELADA', gateway_subscription_id = '" + noGateway
+                + "' WHERE tenant_id = ?", tenant);
+        return noGateway;
+    }
+
+    private ResultActions webhook(String evento, String assinaturaNoGateway) throws Exception {
+        return mockMvc.perform(post("/api/v1/webhooks/cobranca")
+                .header("asaas-access-token", TOKEN_WEBHOOK)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"id": "evt_%s", "event": "%s",
+                         "payment": {"id": "pay_%s", "subscription": "%s",
+                                     "dueDate": "2026-11-01"}}
+                        """.formatted(UUID.randomUUID(), evento, UUID.randomUUID(), assinaturaNoGateway)));
+    }
+
+    private static void executar(String sql, UUID parametro) throws SQLException {
         try (Connection dono = conexaoDono();
              PreparedStatement ps = dono.prepareStatement(sql)) {
-            ps.setObject(1, tenant);
+            ps.setObject(1, parametro);
+            ps.executeUpdate();
+        }
+    }
+
+    private static String coluna(String sql, Object parametro) throws SQLException {
+        try (Connection dono = conexaoDono();
+             PreparedStatement ps = dono.prepareStatement(sql)) {
+            ps.setObject(1, parametro);
             try (var rs = ps.executeQuery()) {
                 return rs.next() ? rs.getString(1) : null;
             }
@@ -369,6 +569,7 @@ class ContratacaoDePlanoTest {
         private final GatewayDePagamento real;
         final List<DadosDoCliente> clientes = new ArrayList<>();
         final List<NovaAssinatura> assinaturas = new ArrayList<>();
+        final List<String> referenciasTentadas = new ArrayList<>();
         final AtomicBoolean falharNaProximaAssinatura = new AtomicBoolean();
 
         GatewayEmMemoria(GatewayDePagamento real) {
@@ -378,6 +579,7 @@ class ContratacaoDePlanoTest {
         synchronized void limpar() {
             clientes.clear();
             assinaturas.clear();
+            referenciasTentadas.clear();
             falharNaProximaAssinatura.set(false);
         }
 
@@ -394,6 +596,7 @@ class ContratacaoDePlanoTest {
 
         @Override
         public synchronized AssinaturaNoGateway garantirAssinatura(NovaAssinatura dados) {
+            referenciasTentadas.add(dados.referenciaExterna());
             if (falharNaProximaAssinatura.getAndSet(false)) {
                 throw new GatewayIndisponivelException("falha simulada", null);
             }

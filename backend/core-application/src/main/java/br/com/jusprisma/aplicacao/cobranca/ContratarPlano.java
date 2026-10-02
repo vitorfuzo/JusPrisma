@@ -14,8 +14,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -27,6 +29,13 @@ import java.util.UUID;
  * <p>As chamadas ao gateway acontecem com a linha da assinatura travada. Segurar a trava
  * durante uma chamada externa é o preço de serializar o clique duplo; a linha é de um único
  * escritório, então ninguém mais espera por ela.
+ *
+ * <p>Quem volta depois de cancelar não tem assinatura corrente. Uma nova é criada, em
+ * {@link Assinatura.Status#AGUARDANDO_PAGAMENTO}, numa transação própria e confirmada antes da
+ * chamada ao gateway. A ordem importa: se o gateway criar a assinatura e a resposta se perder,
+ * a nova tentativa encontra a mesma linha e manda a mesma referência, e o gateway devolve a
+ * que já existe em vez de cobrar duas vezes. Na mesma transação, a linha seria desfeita junto
+ * com o erro e a nova tentativa sairia com outro id.
  */
 @Service
 public class ContratarPlano {
@@ -70,8 +79,13 @@ public class ContratarPlano {
         DocumentoDeCobranca documento = DocumentoDeCobranca.de(comando.documento());
         Plano plano = planoContratavel(comando.planoCodigo());
 
+        escopo.executarComo(comando.tenantId(), () -> {
+            garantirAssinaturaCorrente(comando.tenantId(), plano);
+            return null;
+        });
+
         return escopo.executarComo(comando.tenantId(), () -> {
-            Assinatura assinatura = assinaturas.travarVigenteDoTenant(comando.tenantId())
+            Assinatura assinatura = assinaturas.travarCorrenteDoTenant(comando.tenantId())
                     .orElseThrow(SemAssinaturaVigenteException::new);
             if (assinatura.contratadaNoGateway()) {
                 throw new AssinaturaJaContratadaException();
@@ -106,6 +120,30 @@ public class ContratarPlano {
     }
 
     /**
+     * Sem assinatura corrente, cria a da recontratação. Uma assinatura cancelada no gateway
+     * cujo período pago já acabou, mas que o job diário ainda não encerrou, é encerrada aqui:
+     * ela não dá mais acesso e não pode impedir a volta do escritório.
+     */
+    private void garantirAssinaturaCorrente(UUID tenantId, Plano plano) {
+        Optional<Assinatura> corrente = assinaturas.travarCorrenteDoTenant(tenantId);
+        if (corrente.isPresent() && encerrada(corrente.get(), Instant.now())) {
+            assinaturas.atualizarStatus(corrente.get().id(), Assinatura.Status.CANCELADA);
+            log.info("assinatura {} encerrada na recontratação: o período pago já tinha acabado",
+                    corrente.get().id());
+            corrente = Optional.empty();
+        }
+        if (corrente.isEmpty()) {
+            assinaturas.registrarSeNaoHaCorrente(Assinatura.aguardandoPagamento(tenantId, plano.codigo()));
+        }
+    }
+
+    /** Ocupa o lugar de assinatura corrente, mas já não dá acesso nem vai voltar a dar. */
+    private static boolean encerrada(Assinatura assinatura, Instant agora) {
+        return assinatura.status() != Assinatura.Status.AGUARDANDO_PAGAMENTO
+                && !assinatura.vigente(agora);
+    }
+
+    /**
      * Situação da contratação, para a interface não oferecer de novo o que já foi feito.
      *
      * @param planoPendente plano escolhido aguardando o primeiro pagamento, ou nulo.
@@ -115,13 +153,15 @@ public class ContratarPlano {
     }
 
     public Situacao situacao(UUID tenantId) {
-        return escopo.executarComo(tenantId, () -> assinaturas.vigenteDoTenant(tenantId)
+        Instant agora = Instant.now();
+        return escopo.executarComo(tenantId, () -> assinaturas.correnteDoTenant(tenantId)
+                .filter(a -> !encerrada(a, agora))
                 .map(a -> new Situacao(a.contratadaNoGateway(), a.planoContratado(),
                         data(a.proximaCobranca()), data(a.cancelaEm())))
                 .orElse(new Situacao(false, null, null, null)));
     }
 
-    private static LocalDate data(java.time.Instant instante) {
+    private static LocalDate data(Instant instante) {
         return instante == null ? null : instante.atZone(FUSO).toLocalDate();
     }
 

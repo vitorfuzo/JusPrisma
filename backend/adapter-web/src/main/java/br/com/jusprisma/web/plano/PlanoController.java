@@ -11,6 +11,7 @@ import br.com.jusprisma.dominio.plano.Plano;
 import br.com.jusprisma.dominio.plano.Recurso;
 import br.com.jusprisma.web.seguranca.UsuarioAutenticado;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -67,23 +68,29 @@ public class PlanoController {
     }
 
     public record SituacaoResponse(
+            @Schema(nullable = true, description = "Plano em vigor; nulo quando o escritório está sem "
+                    + "plano (assinatura cancelada, ou recontratada e aguardando o primeiro pagamento)")
             PlanoResponse plano,
             Map<String, Integer> saldos,
             ContratarPlano.Situacao contratacao) {
     }
 
     @GetMapping("/assinatura")
-    @Operation(summary = "Plano vigente do escritório e saldos de crédito")
+    @Operation(summary = "Plano vigente do escritório e saldos de crédito",
+            description = "Responde também a quem está sem plano, com plano nulo: é a tela de onde "
+                    + "esse escritório contrata de novo.")
     public SituacaoResponse situacao(Authentication autenticacao) {
         UsuarioAutenticado atual = UsuarioAutenticado.de(autenticacao);
-        Plano plano = limites.planoDe(atual.tenantId());
+        PlanoResponse plano = limites.planoVigente(atual.tenantId())
+                .map(PlanoController::paraResposta)
+                .orElse(null);
 
         Map<String, Integer> saldos = new LinkedHashMap<>();
         for (TipoCredito tipo : TipoCredito.values()) {
             saldos.put(tipo.name(), creditos.saldo(atual.tenantId(), tipo));
         }
 
-        return new SituacaoResponse(paraResposta(plano), saldos,
+        return new SituacaoResponse(plano, saldos,
                 contratarPlano.situacao(atual.tenantId()));
     }
 
