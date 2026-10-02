@@ -167,13 +167,29 @@ class AsaasGatewayTest {
     }
 
     @Test
-    @DisplayName("evento sem vencimento não inventa próxima cobrança")
-    void semVencimentoSemProximaCobranca() {
+    @DisplayName("evento de assinatura identifica a assinatura pelo objeto da raiz, sem próxima cobrança")
+    void eventoDeAssinatura() {
+        // Eventos de assinatura não trazem payment: o id está em subscription.id, na raiz.
         var evento = gateway.interpretar("""
                 {"id": "evt_ficticio", "event": "SUBSCRIPTION_DELETED",
-                 "subscription": {"id": "sub_ficticia"}}
+                 "subscription": {"object": "subscription", "id": "sub_ficticia",
+                                  "nextDueDate": "2026-11-16", "deleted": true}}
                 """).orElseThrow();
 
+        assertThat(evento.tipo()).isEqualTo(EventoDeCobranca.Tipo.ASSINATURA_CANCELADA);
+        assertThat(evento.assinaturaNoGateway()).isEqualTo("sub_ficticia");
         assertThat(evento.proximaCobranca()).isNull();
+    }
+
+    @Test
+    @DisplayName("evento de pagamento identifica a assinatura pelo campo do pagamento")
+    void eventoDePagamentoIdentificaAssinatura() {
+        var evento = gateway.interpretar("""
+                {"id": "evt_ficticio", "event": "PAYMENT_OVERDUE",
+                 "payment": {"object": "payment", "subscription": "sub_ficticia",
+                             "dueDate": "2026-10-16"}}
+                """).orElseThrow();
+
+        assertThat(evento.assinaturaNoGateway()).isEqualTo("sub_ficticia");
     }
 }
