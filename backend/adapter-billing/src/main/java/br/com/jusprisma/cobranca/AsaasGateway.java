@@ -211,6 +211,7 @@ public class AsaasGateway implements GatewayDePagamento {
                     id,
                     traduzir(tipoAsaas),
                     pagamento.path("subscription").asString(),
+                    pagamento.path("id").asString(),
                     proximoVencimento(pagamento),
                     corpo));
         } catch (RuntimeException e) {
@@ -230,6 +231,9 @@ public class AsaasGateway implements GatewayDePagamento {
             return EventoDeCobranca.Tipo.DESCONHECIDO;
         }
         return switch (eventoAsaas) {
+            // Os dois, e não um só: Pix só emite RECEIVED, e no cartão o RECEIVED chega ~32
+            // dias depois do CONFIRMED. Boleto e cartão emitem ambos para o mesmo pagamento;
+            // quem impede a recarga em dobro é a idempotência por pagamento.
             case "PAYMENT_CONFIRMED", "PAYMENT_RECEIVED" ->
                     EventoDeCobranca.Tipo.PAGAMENTO_CONFIRMADO;
             case "PAYMENT_OVERDUE", "PAYMENT_REFUSED" ->

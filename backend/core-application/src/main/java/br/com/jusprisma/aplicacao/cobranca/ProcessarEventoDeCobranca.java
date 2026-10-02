@@ -36,7 +36,10 @@ public class ProcessarEventoDeCobranca {
 
     public enum Resultado {
         PROCESSADO,
-        /** Já tínhamos visto este evento. Resposta de sucesso, sem repetir o efeito. */
+        /**
+         * Já tínhamos visto este evento, ou outro evento do mesmo pagamento. Resposta de
+         * sucesso, sem repetir o efeito.
+         */
         REPETIDO,
         /** Registrado para auditoria, sem efeito no domínio. */
         IGNORADO
@@ -84,6 +87,23 @@ public class ProcessarEventoDeCobranca {
 
         switch (evento.tipo()) {
             case PAGAMENTO_CONFIRMADO -> {
+                if (evento.pagamentoNoGateway() == null || evento.pagamentoNoGateway().isBlank()) {
+                    // Sem o pagamento não há como saber se outro evento já creditou. Fica
+                    // registrado em evento_gateway, com o corpo, para tratamento manual.
+                    log.error("evento {} de pagamento confirmado sem identificador de pagamento",
+                            evento.idExterno());
+                    return Resultado.IGNORADO;
+                }
+                // O mesmo pagamento chega mais de uma vez com ids de evento diferentes
+                // (cartão: aprovação e liquidação). A reserva vem antes do efeito, como o
+                // registro do evento: em falha no meio, o erro fica no evento, mas a
+                // recarga não se repete.
+                if (!eventos.registrarPagamentoSeNovo(gateway.nome(),
+                        evento.pagamentoNoGateway(), evento.idExterno())) {
+                    log.info("pagamento {} do {} já havia sido efetivado pelo outro evento; evento {} sem efeito",
+                            evento.pagamentoNoGateway(), gateway.nome(), evento.idExterno());
+                    return Resultado.REPETIDO;
+                }
                 eventos.atualizarStatus(assinatura.assinaturaId(),
                         Assinatura.Status.ATIVA, evento.proximaCobranca());
                 // O plano contratado só passa a valer aqui, antes da recarga: a recarga lê o
