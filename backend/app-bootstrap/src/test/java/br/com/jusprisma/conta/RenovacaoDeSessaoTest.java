@@ -35,7 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * troca strings; o que protege o usuário é a família inteira cair quando um token já
  * consumido reaparece.
  */
-@SpringBootTest(classes = JusPrismaApplication.class)
+@SpringBootTest(classes = {JusPrismaApplication.class, CaixaDeSaidaDeTeste.Configuracao.class})
 @AutoConfigureMockMvc
 @Testcontainers
 class RenovacaoDeSessaoTest {
