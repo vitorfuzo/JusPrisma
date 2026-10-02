@@ -19,6 +19,10 @@ public class RepositorioDeAssinaturaJdbc implements RepositorioDeAssinatura {
             id, tenant_id, plano_codigo, status, inicio_em, fim_do_periodo, proxima_cobranca,
             gateway_customer_id, gateway_subscription_id, plano_contratado, cancela_em""";
 
+    // Mesma lista do índice assinatura_corrente_unica (V12).
+    private static final String STATUS_CORRENTES =
+            "'TRIAL', 'ATIVA', 'INADIMPLENTE', 'AGUARDANDO_PAGAMENTO'";
+
     private final JdbcClient jdbc;
 
     public RepositorioDeAssinaturaJdbc(JdbcClient jdbc) {
@@ -47,6 +51,23 @@ public class RepositorioDeAssinaturaJdbc implements RepositorioDeAssinatura {
     }
 
     @Override
+    public void registrarSeNaoHaCorrente(Assinatura assinatura) {
+        // ON CONFLICT em vez de capturar a violação: no Postgres, um erro aborta a transação
+        // inteira. A inserção concorrente espera a outra terminar e então não faz nada.
+        jdbc.sql("""
+                INSERT INTO assinatura (id, tenant_id, plano_codigo, status, inicio_em)
+                VALUES (:id, :tenantId, :plano, :status, :inicioEm)
+                ON CONFLICT (tenant_id) WHERE status IN (%s) DO NOTHING
+                """.formatted(STATUS_CORRENTES))
+                .param("id", assinatura.id())
+                .param("tenantId", assinatura.tenantId())
+                .param("plano", assinatura.planoCodigo())
+                .param("status", assinatura.status().name())
+                .param("inicioEm", Timestamp.from(assinatura.inicioEm()))
+                .update();
+    }
+
+    @Override
     public Optional<Assinatura> vigenteDoTenant(UUID tenantId) {
         // O índice parcial único garante no máximo uma vigente por tenant, então não há
         // ambiguidade de qual devolver.
@@ -62,16 +83,29 @@ public class RepositorioDeAssinaturaJdbc implements RepositorioDeAssinatura {
     }
 
     @Override
-    public Optional<Assinatura> travarVigenteDoTenant(UUID tenantId) {
+    public Optional<Assinatura> correnteDoTenant(UUID tenantId) {
+        return jdbc.sql("""
+                SELECT %s
+                  FROM assinatura
+                 WHERE tenant_id = :tenantId
+                   AND status IN (%s)
+                """.formatted(COLUNAS, STATUS_CORRENTES))
+                .param("tenantId", tenantId)
+                .query(RepositorioDeAssinaturaJdbc::mapear)
+                .optional();
+    }
+
+    @Override
+    public Optional<Assinatura> travarCorrenteDoTenant(UUID tenantId) {
         // FOR UPDATE serializa duas contratacoes simultaneas do mesmo escritorio: a segunda
         // espera a primeira terminar e ja encontra a assinatura registrada no gateway.
         return jdbc.sql("""
                 SELECT %s
                   FROM assinatura
                  WHERE tenant_id = :tenantId
-                   AND status IN ('TRIAL', 'ATIVA', 'INADIMPLENTE')
+                   AND status IN (%s)
                    FOR UPDATE
-                """.formatted(COLUNAS))
+                """.formatted(COLUNAS, STATUS_CORRENTES))
                 .param("tenantId", tenantId)
                 .query(RepositorioDeAssinaturaJdbc::mapear)
                 .optional();

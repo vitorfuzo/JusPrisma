@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>Fixtures explicitamente fictícias: domínio {@code .invalido} não resolve.
  */
-@SpringBootTest(classes = JusPrismaApplication.class)
+@SpringBootTest(classes = {JusPrismaApplication.class, CaixaDeSaidaDeTeste.Configuracao.class})
 @AutoConfigureMockMvc
 @Testcontainers
 class CadastroELoginTest {

@@ -42,16 +42,24 @@ public class LimitesVigentes {
     }
 
     public Plano planoDe(UUID tenantId) {
+        return planoVigente(tenantId).orElseThrow(SemAssinaturaVigenteException::new);
+    }
+
+    /**
+     * O plano em vigor, ou vazio se o escritório está sem plano — cancelado, ou recontratado e
+     * ainda sem pagamento. Para quem precisa mostrar essa situação, e não recusar por ela.
+     */
+    public java.util.Optional<Plano> planoVigente(UUID tenantId) {
         Assinatura assinatura = escopo.executarComo(tenantId,
                 () -> assinaturas.vigenteDoTenant(tenantId).orElse(null));
 
         if (assinatura == null || !assinatura.vigente(java.time.Instant.now())) {
-            throw new SemAssinaturaVigenteException();
+            return java.util.Optional.empty();
         }
 
-        return planos.buscar(assinatura.planoCodigo())
+        return java.util.Optional.of(planos.buscar(assinatura.planoCodigo())
                 .orElseThrow(() -> new IllegalStateException(
-                        "assinatura aponta para plano inexistente: " + assinatura.planoCodigo()));
+                        "assinatura aponta para plano inexistente: " + assinatura.planoCodigo())));
     }
 
     /**

@@ -20,7 +20,8 @@ interface Plano {
 }
 
 interface Situacao {
-  plano: Plano
+  // Nulo quando o escritório está sem plano: cancelado, ou recontratado e sem pagamento ainda.
+  plano: Plano | null
   saldos: Record<string, number>
   contratacao: {
     contratado: boolean
@@ -106,9 +107,19 @@ export function Planos() {
     <div className="flex flex-col gap-8">
       <section>
         <h1 className="text-xl font-semibold text-slate-900">Plano e créditos</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Seu plano atual é <strong>{atual.nome}</strong> ({reais(atual.precoCentavos)}).
-        </p>
+        {atual ? (
+          <p className="mt-1 text-sm text-slate-500">
+            Seu plano atual é <strong>{atual.nome}</strong> ({reais(atual.precoCentavos)}).
+          </p>
+        ) : (
+          <div className="mt-3">
+            <Aviso tipo="informacao" titulo="Seu escritório está sem plano ativo">
+              {contratacao.contratado
+                ? 'O acesso volta quando o primeiro pagamento for confirmado.'
+                : 'Contrate um plano abaixo para voltar a usar a plataforma.'}
+            </Aviso>
+          </div>
+        )}
       </section>
 
       <section>
@@ -128,43 +139,45 @@ export function Planos() {
         </div>
       </section>
 
-      <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-          O que seu plano inclui
-        </h2>
-        <dl className="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
-          {atual.cotas.map((cota) => (
-            <div key={cota.chave} className="flex justify-between px-4 py-2.5 text-sm">
-              <dt className="text-slate-600">{NOME_DA_COTA[cota.chave] ?? cota.chave}</dt>
-              <dd className="font-medium text-slate-900">{cota.descricao}</dd>
-            </div>
-          ))}
-          {atual.recursos.map((recurso) => (
-            <div key={recurso} className="flex justify-between px-4 py-2.5 text-sm">
-              <dt className="text-slate-600">{NOME_DO_RECURSO[recurso] ?? recurso}</dt>
-              <dd className="font-medium text-emerald-700">incluído</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
+      {atual && (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            O que seu plano inclui
+          </h2>
+          <dl className="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
+            {atual.cotas.map((cota) => (
+              <div key={cota.chave} className="flex justify-between px-4 py-2.5 text-sm">
+                <dt className="text-slate-600">{NOME_DA_COTA[cota.chave] ?? cota.chave}</dt>
+                <dd className="font-medium text-slate-900">{cota.descricao}</dd>
+              </div>
+            ))}
+            {atual.recursos.map((recurso) => (
+              <div key={recurso} className="flex justify-between px-4 py-2.5 text-sm">
+                <dt className="text-slate-600">{NOME_DO_RECURSO[recurso] ?? recurso}</dt>
+                <dd className="font-medium text-emerald-700">incluído</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
 
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-          Outros planos
+          {atual ? 'Outros planos' : 'Planos'}
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {catalogo.data!.map((plano) => (
             <div
               key={plano.codigo}
               className={`rounded-lg border bg-white p-4 ${
-                plano.codigo === atual.codigo
+                plano.codigo === atual?.codigo
                   ? 'border-marca-600 ring-1 ring-marca-600/20'
                   : 'border-slate-200'
               }`}
             >
               <p className="font-semibold text-slate-900">{plano.nome}</p>
               <p className="mt-1 text-lg text-slate-900">{reais(plano.precoCentavos)}</p>
-              {plano.codigo === atual.codigo && (
+              {plano.codigo === atual?.codigo && (
                 <p className="mt-2 text-xs font-medium text-marca-700">Plano atual</p>
               )}
             </div>
