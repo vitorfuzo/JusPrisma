@@ -155,6 +155,22 @@ public class RepositorioDeContaJdbc implements RepositorioDeConta {
                 .optional();
     }
 
+    @Override
+    public Optional<String> nomeDoEscritorio() {
+        return jdbc.sql("SELECT nome FROM tenant")
+                .query(String.class)
+                .optional();
+    }
+
+    @Override
+    public void registrarDocumentoDeCobranca(java.util.UUID tenantId,
+                                             br.com.jusprisma.dominio.conta.DocumentoDeCobranca documento) {
+        jdbc.sql("UPDATE tenant SET documento_cobranca = :documento WHERE id = :id")
+                .param("documento", documento.digitos())
+                .param("id", tenantId)
+                .update();
+    }
+
     private static java.time.Instant instante(java.sql.ResultSet rs, String coluna)
             throws java.sql.SQLException {
         Timestamp valor = rs.getTimestamp(coluna);

@@ -15,7 +15,8 @@ public record Assinatura(
         Instant fimDoPeriodo,
         Instant proximaCobranca,
         String gatewayCustomerId,
-        String gatewaySubscriptionId) {
+        String gatewaySubscriptionId,
+        String planoContratado) {
 
     public enum Status {
         /** Degustação paga, converte automaticamente ao fim do período. */
@@ -38,7 +39,7 @@ public record Assinatura(
     public static Assinatura iniciarTrial(UUID tenantId, String planoCodigo, Instant fimDoTrial) {
         return new Assinatura(
                 UUID.randomUUID(), tenantId, planoCodigo, Status.TRIAL,
-                Instant.now(), fimDoTrial, fimDoTrial, null, null);
+                Instant.now(), fimDoTrial, fimDoTrial, null, null, null);
     }
 
     /**
@@ -48,6 +49,11 @@ public record Assinatura(
      * atrasado perde cliente que só trocou de cartão. O corte acontece quando a assinatura
      * é efetivamente cancelada.
      */
+    /** Já existe assinatura criada no gateway: contratar de novo cobraria em dobro. */
+    public boolean contratadaNoGateway() {
+        return gatewaySubscriptionId != null;
+    }
+
     public boolean vigente() {
         return status == Status.TRIAL || status == Status.ATIVA || status == Status.INADIMPLENTE;
     }

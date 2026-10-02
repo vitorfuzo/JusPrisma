@@ -60,6 +60,18 @@ public interface RepositorioDeConta {
     /** E-mail do dono da conta, para avisos administrativos. Sujeito a RLS. */
     Optional<String> emailDoDonoDaConta();
 
+    /** Nome do escritório corrente, como cadastrado. Sujeito a RLS. */
+    Optional<String> nomeDoEscritorio();
+
+    /**
+     * Grava o CPF ou CNPJ de cobrança do escritório corrente. Sujeito a RLS.
+     *
+     * <p>Recebe o tipo do domínio, e não uma String, para que só documento já validado
+     * chegue ao banco.
+     */
+    void registrarDocumentoDeCobranca(java.util.UUID tenantId,
+                                      br.com.jusprisma.dominio.conta.DocumentoDeCobranca documento);
+
     record ContaLocalizada(java.util.UUID usuarioId, java.util.UUID tenantId) {
     }
 }

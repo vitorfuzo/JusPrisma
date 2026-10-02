@@ -44,6 +44,10 @@ resilience4j:
         # recuperando de sobrecarga só prolonga a sobrecarga.
         enable-exponential-backoff: true
         exponential-backoff-multiplier: 2
+        # Recusa de dados (4xx) não melhora repetindo, e não é falha do gateway: não conta
+        # para abrir o circuito nem dispara retentativa.
+        ignore-exceptions:
+          - br.com.jusprisma.aplicacao.cobranca.CobrancaRecusadaException
   circuitbreaker:
     instances:
       asaas:
@@ -51,6 +55,8 @@ resilience4j:
         failure-rate-threshold: 60
         wait-duration-in-open-state: 30s
         permitted-number-of-calls-in-half-open-state: 3
+        ignore-exceptions:
+          - br.com.jusprisma.aplicacao.cobranca.CobrancaRecusadaException
 
 management:
   endpoints:

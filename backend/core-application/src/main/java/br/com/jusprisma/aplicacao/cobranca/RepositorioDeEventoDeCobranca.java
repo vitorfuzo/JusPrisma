@@ -32,6 +32,14 @@ public interface RepositorioDeEventoDeCobranca {
 
     void atualizarStatus(UUID assinaturaId, Assinatura.Status status, Instant proximaCobranca);
 
+    /**
+     * Troca o plano vigente pelo plano contratado e pendente de pagamento, se houver.
+     *
+     * @return o plano que passou a valer, ou vazio se não havia contratação pendente — o caso
+     *         da renovação mensal e da notificação reentregue.
+     */
+    Optional<String> efetivarPlanoContratado(UUID assinaturaId);
+
     record AssinaturaLocalizada(UUID assinaturaId, UUID tenantId, String planoCodigo, String status) {
     }
 

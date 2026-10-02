@@ -86,6 +86,11 @@ public class ProcessarEventoDeCobranca {
             case PAGAMENTO_CONFIRMADO -> {
                 eventos.atualizarStatus(assinatura.assinaturaId(),
                         Assinatura.Status.ATIVA, evento.proximaCobranca());
+                // O plano contratado só passa a valer aqui, antes da recarga: a recarga lê o
+                // plano vigente, e as cotas do primeiro período têm que ser as do plano pago.
+                eventos.efetivarPlanoContratado(assinatura.assinaturaId())
+                        .ifPresent(plano -> log.info("assinatura {} passou ao plano {}",
+                                assinatura.assinaturaId(), plano));
                 // Pagou, recebe as cotas do período. É o único lugar onde a recarga
                 // recorrente acontece: crédito só entra contra dinheiro que entrou.
                 recarga.abastecer(assinatura.tenantId(), "renovação do plano");

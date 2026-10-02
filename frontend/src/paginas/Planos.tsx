@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { chamar } from '../api/cliente'
 import { Aviso } from '../componentes/Aviso'
+import { useAutenticacao } from '../auth/useAutenticacao'
+import { FormularioDeContratacao } from './FormularioDeContratacao'
 
 interface Cota {
   chave: string
@@ -20,7 +22,15 @@ interface Plano {
 interface Situacao {
   plano: Plano
   saldos: Record<string, number>
+  contratacao: {
+    contratado: boolean
+    planoPendente: string | null
+    proximaCobranca: string | null
+  }
 }
+
+// A degustação vem com o cadastro; não aparece entre os planos que se contratam.
+const PLANO_DE_DEGUSTACAO = 'DEGUSTACAO'
 
 const NOME_DA_COTA: Record<string, string> = {
   PERFIS_NOVOS_MES: 'Perfis novos por mês',
@@ -53,7 +63,15 @@ function reais(centavos: number): string {
   return (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+function dataCurta(iso: string): string {
+  // A data vem sem fuso (aaaa-mm-dd). new Date() a leria como meia-noite UTC e, no Brasil,
+  // mostraria o dia anterior.
+  const [ano, mes, dia] = iso.split('-')
+  return `${dia}/${mes}/${ano}`
+}
+
 export function Planos() {
+  const { sessao } = useAutenticacao()
   const situacao = useQuery({
     queryKey: ['assinatura'],
     queryFn: () => chamar<Situacao>('/v1/assinatura'),
@@ -77,6 +95,11 @@ export function Planos() {
   }
 
   const atual = situacao.data!.plano
+  const contratacao = situacao.data!.contratacao
+  const pendente = catalogo.data?.find((p) => p.codigo === contratacao.planoPendente)
+  const contrataveis = (catalogo.data ?? []).filter(
+    (p) => p.codigo !== PLANO_DE_DEGUSTACAO && p.precoCentavos > 0,
+  )
 
   return (
     <div className="flex flex-col gap-8">
@@ -146,11 +169,28 @@ export function Planos() {
             </div>
           ))}
         </div>
-        {/* A troca de plano depende da integração de cobrança (F0-9). Enquanto não
-            existe, é mais honesto dizer isso do que exibir um botão que não faz nada. */}
-        <p className="mt-3 text-sm text-slate-500">
-          A troca de plano ainda não está disponível por aqui. Fale com o suporte.
-        </p>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Contratar
+        </h2>
+        {contratacao.contratado ? (
+          <Aviso tipo="informacao" titulo="Plano contratado">
+            {pendente
+              ? `O plano ${pendente.nome} passa a valer quando o primeiro pagamento for confirmado.`
+              : 'Seu plano está contratado.'}
+            {contratacao.proximaCobranca &&
+              ` Próxima cobrança em ${dataCurta(contratacao.proximaCobranca)}.`}{' '}
+            Para trocar de plano, fale com o suporte.
+          </Aviso>
+        ) : sessao?.papel === 'OWNER' ? (
+          <FormularioDeContratacao planos={contrataveis} />
+        ) : (
+          <p className="text-sm text-slate-500">
+            Só o administrador do escritório pode contratar um plano.
+          </p>
+        )}
       </section>
     </div>
   )
